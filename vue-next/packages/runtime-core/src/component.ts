@@ -1,10 +1,10 @@
 import { VNode, VNodeChild, isVNode } from './vnode'
 import {
-  reactive,
   ReactiveEffect,
   pauseTracking,
   resetTracking,
-  shallowReadonly
+  shallowReadonly,
+  proxyRefs
 } from '@vue/reactivity'
 import {
   CreateComponentPublicInstance,
@@ -548,7 +548,7 @@ export function handleSetupResult(
     }
     // setup returned bindings.
     // assuming a render function compiled from template is present.
-    instance.setupState = reactive(setupResult)
+    instance.setupState = proxyRefs(setupResult)
     if (__DEV__) {
       exposeSetupStateOnRenderContext(instance)
     }
@@ -589,6 +589,7 @@ function finishComponentSetup(
       instance.render = Component.render as InternalRenderFunction
     }
   } else if (!instance.render) {
+    // could be set from setup()
     if (compile && Component.template && !Component.render) {
       if (__DEV__) {
         startMeasure(instance, `compile`)
@@ -599,27 +600,6 @@ function finishComponentSetup(
       })
       if (__DEV__) {
         endMeasure(instance, `compile`)
-      }
-      // mark the function as runtime compiled
-      ;(Component.render as InternalRenderFunction)._rc = true
-    }
-
-    if (__DEV__ && !Component.render) {
-      /* istanbul ignore if */
-      if (!compile && Component.template) {
-        warn(
-          `Component provided template option but ` +
-            `runtime compilation is not supported in this build of Vue.` +
-            (__ESM_BUNDLER__
-              ? ` Configure your bundler to alias "vue" to "vue/dist/vue.esm-bundler.js".`
-              : __ESM_BROWSER__
-                ? ` Use "vue.esm-browser.js" instead.`
-                : __GLOBAL__
-                  ? ` Use "vue.global.js" instead.`
-                  : ``) /* should not happen */
-        )
-      } else {
-        warn(`Component is missing template or render function.`)
       }
     }
 
@@ -641,6 +621,26 @@ function finishComponentSetup(
     currentInstance = instance
     applyOptions(instance, Component)
     currentInstance = null
+  }
+
+  // warn missing template/render
+  if (__DEV__ && !Component.render && instance.render === NOOP) {
+    /* istanbul ignore if */
+    if (!compile && Component.template) {
+      warn(
+        `Component provided template option but ` +
+          `runtime compilation is not supported in this build of Vue.` +
+          (__ESM_BUNDLER__
+            ? ` Configure your bundler to alias "vue" to "vue/dist/vue.esm-bundler.js".`
+            : __ESM_BROWSER__
+              ? ` Use "vue.esm-browser.js" instead.`
+              : __GLOBAL__
+                ? ` Use "vue.global.js" instead.`
+                : ``) /* should not happen */
+      )
+    } else {
+      warn(`Component is missing template or render function.`)
+    }
   }
 }
 

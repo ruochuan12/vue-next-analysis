@@ -4,7 +4,8 @@ import {
   SetupContext,
   ComponentInternalOptions,
   PublicAPIComponent,
-  Component
+  Component,
+  InternalRenderFunction
 } from './component'
 import {
   isFunction,
@@ -265,7 +266,7 @@ export type ExtractComputedReturns<T extends any> = {
 type WatchOptionItem =
   | string
   | WatchCallback
-  | { handler: WatchCallback } & WatchOptions
+  | { handler: WatchCallback | string } & WatchOptions
 
 type ComponentWatchOptionItem = WatchOptionItem | WatchOptionItem[]
 
@@ -363,6 +364,8 @@ function createDuplicateChecker() {
 
 type DataFn = (vm: ComponentPublicInstance) => any
 
+export let isInBeforeCreate = false
+
 export function applyOptions(
   instance: ComponentInternalInstance,
   options: ComponentOptions,
@@ -390,6 +393,7 @@ export function applyOptions(
     deactivated,
     beforeUnmount,
     unmounted,
+    render,
     renderTracked,
     renderTriggered,
     errorCaptured
@@ -398,14 +402,20 @@ export function applyOptions(
   const publicThis = instance.proxy!
   const ctx = instance.ctx
   const globalMixins = instance.appContext.mixins
-  // call it only during dev
+
+  if (asMixin && render && instance.render === NOOP) {
+    instance.render = render as InternalRenderFunction
+  }
 
   // applyOptions is called non-as-mixin once per instance
   if (!asMixin) {
+    isInBeforeCreate = true
     callSyncHook('beforeCreate', options, publicThis, globalMixins)
+    isInBeforeCreate = false
     // global mixins are applied first
     applyMixins(instance, globalMixins, deferredData, deferredWatch)
   }
+
   // extending a base component...
   if (extendsOptions) {
     applyOptions(instance, extendsOptions, deferredData, deferredWatch, true)
@@ -694,7 +704,14 @@ function createWatcher(
     if (isArray(raw)) {
       raw.forEach(r => createWatcher(r, ctx, publicThis, key))
     } else {
-      watch(getter, raw.handler.bind(publicThis), raw)
+      const handler = isFunction(raw.handler)
+        ? raw.handler.bind(publicThis)
+        : (ctx[raw.handler] as WatchCallback)
+      if (isFunction(handler)) {
+        watch(getter, handler, raw)
+      } else if (__DEV__) {
+        warn(`Invalid watch handler specified by key "${raw.handler}"`, handler)
+      }
     }
   } else if (__DEV__) {
     warn(`Invalid watch option: "${key}"`)

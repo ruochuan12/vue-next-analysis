@@ -1,39 +1,94 @@
 import { ErrorCodes, callWithErrorHandling } from './errorHandling'
 import { isArray } from '@vue/shared'
 
-export interface Job {
+export interface SchedulerJob {
   (): void
+  /**
+   * unique job id, only present on raw effects, e.g. component render effect
+   */
   id?: number
+  /**
+   * Indicates this is a watch() callback and is allowed to trigger itself.
+   * A watch callback doesn't track its dependencies so if it triggers itself
+   * again, it's likely intentional and it is the user's responsibility to
+   * perform recursive state mutation that eventually stabilizes.
+   */
+  cb?: boolean
 }
 
-const queue: (Job | null)[] = []
+const queue: (SchedulerJob | null)[] = []
 const postFlushCbs: Function[] = []
-const p = Promise.resolve()
+const resolvedPromise: Promise<any> = Promise.resolve()
+let currentFlushPromise: Promise<void> | null = null
 
 let isFlushing = false
 let isFlushPending = false
 let flushIndex = 0
 let pendingPostFlushCbs: Function[] | null = null
 let pendingPostFlushIndex = 0
+let hasPendingPreFlushJobs = false
+let currentPreFlushParentJob: SchedulerJob | null = null
 
 const RECURSION_LIMIT = 100
-type CountMap = Map<Job | Function, number>
+type CountMap = Map<SchedulerJob | Function, number>
 
 export function nextTick(fn?: () => void): Promise<void> {
+  const p = currentFlushPromise || resolvedPromise
   return fn ? p.then(fn) : p
 }
 
-export function queueJob(job: Job) {
-  if (!queue.includes(job, flushIndex)) {
+export function queueJob(job: SchedulerJob) {
+  // the dedupe search uses the startIndex argument of Array.includes()
+  // by default the search index includes the current job that is being run
+  // so it cannot recursively trigger itself again.
+  // if the job is a watch() callback, the search will start with a +1 index to
+  // allow it recursively trigger itself - it is the user's responsibility to
+  // ensure it doesn't end up in an infinite loop.
+  if (
+    (!queue.length ||
+      !queue.includes(
+        job,
+        isFlushing && job.cb ? flushIndex + 1 : flushIndex
+      )) &&
+    job !== currentPreFlushParentJob
+  ) {
+    if (job.id && job.id > 0) {
+      debugger
+    }
     queue.push(job)
+    if ((job.id as number) < 0) hasPendingPreFlushJobs = true
     queueFlush()
   }
 }
 
-export function invalidateJob(job: Job) {
+export function invalidateJob(job: SchedulerJob) {
   const i = queue.indexOf(job)
   if (i > -1) {
     queue[i] = null
+  }
+}
+
+/**
+ * Run flush: 'pre' watcher callbacks. This is only called in
+ * `updateComponentPreRender` to cover the case where pre-flush watchers are
+ * triggered by the change of a component's props. This means the scheduler is
+ * already flushing and we are already inside the component's update effect,
+ * right when the render function is about to be called. So if the watcher
+ * triggers the same component to update, we don't want it to be queued (this
+ * is checked via `currentPreFlushParentJob`).
+ */
+export function runPreflushJobs(parentJob: SchedulerJob) {
+  if (hasPendingPreFlushJobs) {
+    currentPreFlushParentJob = parentJob
+    hasPendingPreFlushJobs = false
+    for (let job, i = flushIndex + 1; i < queue.length; i++) {
+      job = queue[i]
+      if (job && (job.id as number) < 0) {
+        job()
+        queue[i] = null
+      }
+    }
+    currentPreFlushParentJob = null
   }
 }
 
@@ -41,7 +96,12 @@ export function queuePostFlushCb(cb: Function | Function[]) {
   if (!isArray(cb)) {
     if (
       !pendingPostFlushCbs ||
-      !pendingPostFlushCbs.includes(cb, pendingPostFlushIndex)
+      !pendingPostFlushCbs.includes(
+        cb,
+        (cb as SchedulerJob).cb
+          ? pendingPostFlushIndex + 1
+          : pendingPostFlushIndex
+      )
     ) {
       postFlushCbs.push(cb)
     }
@@ -57,7 +117,7 @@ export function queuePostFlushCb(cb: Function | Function[]) {
 function queueFlush() {
   if (!isFlushing && !isFlushPending) {
     isFlushPending = true
-    nextTick(flushJobs)
+    currentFlushPromise = resolvedPromise.then(flushJobs)
   }
 }
 
@@ -83,7 +143,7 @@ export function flushPostFlushCbs(seen?: CountMap) {
   }
 }
 
-const getId = (job: Job) => (job.id == null ? Infinity : job.id)
+const getId = (job: SchedulerJob) => (job.id == null ? Infinity : job.id)
 
 function flushJobs(seen?: CountMap) {
   isFlushPending = false
@@ -103,37 +163,43 @@ function flushJobs(seen?: CountMap) {
   // during execution of another flushed job.
   queue.sort((a, b) => getId(a!) - getId(b!))
 
-  for (flushIndex = 0; flushIndex < queue.length; flushIndex++) {
-    const job = queue[flushIndex]
-    if (job) {
-      if (__DEV__) {
-        checkRecursiveUpdates(seen!, job)
+  try {
+    for (flushIndex = 0; flushIndex < queue.length; flushIndex++) {
+      const job = queue[flushIndex]
+      if (job) {
+        if (__DEV__) {
+          checkRecursiveUpdates(seen!, job)
+        }
+        callWithErrorHandling(job, null, ErrorCodes.SCHEDULER)
       }
-      callWithErrorHandling(job, null, ErrorCodes.SCHEDULER)
     }
-  }
-  flushIndex = 0
-  queue.length = 0
+  } finally {
+    flushIndex = 0
+    queue.length = 0
 
-  flushPostFlushCbs(seen)
-  isFlushing = false
-  // some postFlushCb queued jobs!
-  // keep flushing until it drains.
-  if (queue.length || postFlushCbs.length) {
-    flushJobs(seen)
+    flushPostFlushCbs(seen)
+    isFlushing = false
+    currentFlushPromise = null
+    // some postFlushCb queued jobs!
+    // keep flushing until it drains.
+    if (queue.length || postFlushCbs.length) {
+      flushJobs(seen)
+    }
   }
 }
 
-function checkRecursiveUpdates(seen: CountMap, fn: Job | Function) {
+function checkRecursiveUpdates(seen: CountMap, fn: SchedulerJob | Function) {
   if (!seen.has(fn)) {
     seen.set(fn, 1)
   } else {
     const count = seen.get(fn)!
     if (count > RECURSION_LIMIT) {
       throw new Error(
-        'Maximum recursive updates exceeded. ' +
-          "You may have code that is mutating state in your component's " +
-          'render function or updated hook or watcher source function.'
+        `Maximum recursive updates exceeded. ` +
+          `This means you have a reactive effect that is mutating its own ` +
+          `dependencies and thus recursively triggering itself. Possible sources ` +
+          `include component template, render function, updated hook or ` +
+          `watcher source function.`
       )
     } else {
       seen.set(fn, count + 1)
