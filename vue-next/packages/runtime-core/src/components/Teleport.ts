@@ -5,7 +5,8 @@ import {
   MoveType,
   RendererElement,
   RendererNode,
-  RendererOptions
+  RendererOptions,
+  traverseStaticChildren
 } from '../renderer'
 import { VNode, VNodeArrayChildren, VNodeProps } from '../vnode'
 import { isString, ShapeFlags } from '@vue/shared'
@@ -14,14 +15,17 @@ import { warn } from '../warning'
 export type TeleportVNode = VNode<RendererNode, RendererElement, TeleportProps>
 
 export interface TeleportProps {
-  to: string | RendererElement
+  to: string | RendererElement | null | undefined
   disabled?: boolean
 }
 
 export const isTeleport = (type: any): boolean => type.__isTeleport
 
-const isTeleportDisabled = (props: VNode['props']): boolean =>
+export const isTeleportDisabled = (props: VNode['props']): boolean =>
   props && (props.disabled || props.disabled === '')
+
+const isTargetSVG = (target: RendererElement): boolean =>
+  typeof SVGElement !== 'undefined' && target instanceof SVGElement
 
 const resolveTarget = <T = RendererElement>(
   props: TeleportProps | null,
@@ -50,7 +54,7 @@ const resolveTarget = <T = RendererElement>(
       return target as any
     }
   } else {
-    if (__DEV__ && !targetSelector) {
+    if (__DEV__ && !targetSelector && !isTeleportDisabled(props)) {
       warn(`Invalid Teleport target: ${targetSelector}`)
     }
     return targetSelector as any
@@ -79,6 +83,7 @@ export const TeleportImpl = {
 
     const disabled = isTeleportDisabled(n2.props)
     const { shapeFlag, children } = n2
+
     if (n1 == null) {
       // insert anchors in the main view
       const placeholder = (n2.el = __DEV__
@@ -89,12 +94,13 @@ export const TeleportImpl = {
         : createText(''))
       insert(placeholder, container, anchor)
       insert(mainAnchor, container, anchor)
-
       const target = (n2.target = resolveTarget(n2.props, querySelector))
       const targetAnchor = (n2.targetAnchor = createText(''))
       if (target) {
         insert(targetAnchor, target)
-      } else if (__DEV__) {
+        // #2652 we could be teleporting from a non-SVG tree into an SVG tree
+        isSVG = isSVG || isTargetSVG(target)
+      } else if (__DEV__ && !disabled) {
         warn('Invalid Teleport target on mount:', target, `(${typeof target})`)
       }
 
@@ -128,6 +134,7 @@ export const TeleportImpl = {
       const wasDisabled = isTeleportDisabled(n1.props)
       const currentContainer = wasDisabled ? container : target
       const currentAnchor = wasDisabled ? mainAnchor : targetAnchor
+      isSVG = isSVG || isTargetSVG(target)
 
       if (n2.dynamicChildren) {
         // fast path when the teleport happens to be a block root
@@ -139,13 +146,10 @@ export const TeleportImpl = {
           parentSuspense,
           isSVG
         )
-        if (n2.patchFlag > 0 && n2.shapeFlag & ShapeFlags.ARRAY_CHILDREN) {
-          const oldChildren = n1.children as VNode[]
-          const children = n2.children as VNode[]
-          for (let i = 0; i < children.length; i++) {
-            children[i].el = oldChildren[i].el
-          }
-        }
+        // even in block tree mode we need to make sure all root-level nodes
+        // in the teleport inherit previous DOM references so that they can
+        // be moved in future patches.
+        traverseStaticChildren(n1, n2, true)
       } else if (!optimized) {
         patchChildren(
           n1,

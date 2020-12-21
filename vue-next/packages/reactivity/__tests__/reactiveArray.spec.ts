@@ -99,6 +99,50 @@ describe('reactivity/reactive/Array', () => {
     expect(fn).toHaveBeenCalledTimes(1)
   })
 
+  test('add existing index on Array should not trigger length dependency', () => {
+    const array = new Array(3)
+    const observed = reactive(array)
+    const fn = jest.fn()
+    effect(() => {
+      fn(observed.length)
+    })
+    expect(fn).toHaveBeenCalledTimes(1)
+    observed[1] = 1
+    expect(fn).toHaveBeenCalledTimes(1)
+  })
+
+  test('add non-integer prop on Array should not trigger length dependency', () => {
+    const array = new Array(3)
+    const observed = reactive(array)
+    const fn = jest.fn()
+    effect(() => {
+      fn(observed.length)
+    })
+    expect(fn).toHaveBeenCalledTimes(1)
+    // @ts-ignore
+    observed.x = 'x'
+    expect(fn).toHaveBeenCalledTimes(1)
+    observed[-1] = 'x'
+    expect(fn).toHaveBeenCalledTimes(1)
+    observed[NaN] = 'x'
+    expect(fn).toHaveBeenCalledTimes(1)
+  })
+
+  // #2427
+  test('track length on for ... in iteration', () => {
+    const array = reactive([1])
+    let length = ''
+    effect(() => {
+      length = ''
+      for (const key in array) {
+        length += key
+      }
+    })
+    expect(length).toBe('0')
+    array.push(1)
+    expect(length).toBe('01')
+  })
+
   describe('Array methods w/ refs', () => {
     let original: any[]
     beforeEach(() => {

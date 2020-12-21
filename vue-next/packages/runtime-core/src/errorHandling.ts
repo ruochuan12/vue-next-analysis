@@ -99,7 +99,8 @@ export function callWithAsyncErrorHandling(
 export function handleError(
   err: unknown,
   instance: ComponentInternalInstance | null,
-  type: ErrorTypes
+  type: ErrorTypes,
+  throwInDev = true
 ) {
   const contextVNode = instance ? instance.vnode : null
   if (instance) {
@@ -112,7 +113,9 @@ export function handleError(
       const errorCapturedHooks = cur.ec
       if (errorCapturedHooks) {
         for (let i = 0; i < errorCapturedHooks.length; i++) {
-          if (errorCapturedHooks[i](err, exposedInstance, errorInfo)) {
+          if (
+            errorCapturedHooks[i](err, exposedInstance, errorInfo) === false
+          ) {
             return
           }
         }
@@ -131,10 +134,15 @@ export function handleError(
       return
     }
   }
-  logError(err, type, contextVNode)
+  logError(err, type, contextVNode, throwInDev)
 }
 
-function logError(err: unknown, type: ErrorTypes, contextVNode: VNode | null) {
+function logError(
+  err: unknown,
+  type: ErrorTypes,
+  contextVNode: VNode | null,
+  throwInDev = true
+) {
   if (__DEV__) {
     const info = ErrorTypeStrings[type]
     if (contextVNode) {
@@ -144,8 +152,12 @@ function logError(err: unknown, type: ErrorTypes, contextVNode: VNode | null) {
     if (contextVNode) {
       popWarningContext()
     }
-    // crash in dev so it's more noticeable
-    throw err
+    // crash in dev by default so it's more noticeable
+    if (throwInDev) {
+      throw err
+    } else if (!__TEST__) {
+      console.error(err)
+    }
   } else {
     // recover in prod to reduce the impact on end-user
     console.error(err)

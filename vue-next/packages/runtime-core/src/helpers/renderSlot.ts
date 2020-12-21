@@ -1,5 +1,6 @@
 import { Data } from '../component'
 import { Slots, RawSlots } from '../componentSlots'
+import { Comment, isVNode } from '../vnode'
 import {
   VNodeArrayChildren,
   openBlock,
@@ -9,6 +10,10 @@ import {
 } from '../vnode'
 import { PatchFlags, SlotFlags } from '@vue/shared'
 import { warn } from '../warning'
+
+export let isRenderingCompiledSlot = 0
+export const setCompiledSlotRendering = (n: number) =>
+  (isRenderingCompiledSlot += n)
 
 /**
  * Compiler runtime helper for rendering `<slot/>`
@@ -33,15 +38,36 @@ export function renderSlot(
     slot = () => []
   }
 
-  return (
-    openBlock(),
-    createBlock(
-      Fragment,
-      { key: props.key },
-      slot ? slot(props) : fallback ? fallback() : [],
-      (slots as RawSlots)._ === SlotFlags.STABLE
-        ? PatchFlags.STABLE_FRAGMENT
-        : PatchFlags.BAIL
-    )
+  // a compiled slot disables block tracking by default to avoid manual
+  // invocation interfering with template-based block tracking, but in
+  // `renderSlot` we can be sure that it's template-based so we can force
+  // enable it.
+  isRenderingCompiledSlot++
+  openBlock()
+  const validSlotContent = slot && ensureValidVNode(slot(props))
+  const rendered = createBlock(
+    Fragment,
+    { key: props.key || `_${name}` },
+    validSlotContent || (fallback ? fallback() : []),
+    validSlotContent && (slots as RawSlots)._ === SlotFlags.STABLE
+      ? PatchFlags.STABLE_FRAGMENT
+      : PatchFlags.BAIL
   )
+  isRenderingCompiledSlot--
+  return rendered
+}
+
+function ensureValidVNode(vnodes: VNodeArrayChildren) {
+  return vnodes.some(child => {
+    if (!isVNode(child)) return true
+    if (child.type === Comment) return false
+    if (
+      child.type === Fragment &&
+      !ensureValidVNode(child.children as VNodeArrayChildren)
+    )
+      return false
+    return true
+  })
+    ? vnodes
+    : null
 }

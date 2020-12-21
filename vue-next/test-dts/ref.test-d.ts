@@ -1,4 +1,16 @@
-import { Ref, ref, isRef, unref, reactive, expectType } from './index'
+import {
+  Ref,
+  ref,
+  shallowRef,
+  isRef,
+  unref,
+  reactive,
+  expectType,
+  proxyRefs,
+  toRef,
+  toRefs,
+  ToRefs
+} from './index'
 
 function plainType(arg: number | Ref<number>) {
   // ref coercing
@@ -17,7 +29,6 @@ function plainType(arg: number | Ref<number>) {
   const nestedRef = ref({
     foo: ref(1)
   })
-  expectType<Ref<{ foo: number }>>(nestedRef)
   expectType<{ foo: number }>(nestedRef.value)
 
   // ref boolean
@@ -111,3 +122,75 @@ const state = reactive({
 })
 
 expectType<string>(state.foo.label)
+
+// shallowRef
+type Status = 'initial' | 'ready' | 'invalidating'
+const shallowStatus = shallowRef<Status>('initial')
+if (shallowStatus.value === 'initial') {
+  expectType<Ref<Status>>(shallowStatus)
+  expectType<Status>(shallowStatus.value)
+  shallowStatus.value = 'invalidating'
+}
+
+const refStatus = ref<Status>('initial')
+if (refStatus.value === 'initial') {
+  expectType<Ref<Status>>(shallowStatus)
+  expectType<Status>(shallowStatus.value)
+  refStatus.value = 'invalidating'
+}
+
+// proxyRefs: should return `reactive` directly
+const r1 = reactive({
+  k: 'v'
+})
+const p1 = proxyRefs(r1)
+expectType<typeof r1>(p1)
+
+// proxyRefs: `ShallowUnwrapRef`
+const r2 = {
+  a: ref(1),
+  obj: {
+    k: ref('foo')
+  }
+}
+const p2 = proxyRefs(r2)
+expectType<number>(p2.a)
+expectType<Ref<string>>(p2.obj.k)
+
+// toRef
+const obj = {
+  a: 1,
+  b: ref(1)
+}
+expectType<Ref<number>>(toRef(obj, 'a'))
+expectType<Ref<number>>(toRef(obj, 'b'))
+
+// toRefs
+const objRefs = toRefs(obj)
+expectType<{
+  a: Ref<number>
+  b: Ref<number>
+}>(objRefs)
+
+// #2687
+interface AppData {
+  state: 'state1' | 'state2' | 'state3'
+}
+
+const data: ToRefs<AppData> = toRefs(
+  reactive({
+    state: 'state1'
+  })
+)
+
+switch (data.state.value) {
+  case 'state1':
+    data.state.value = 'state2'
+    break
+  case 'state2':
+    data.state.value = 'state3'
+    break
+  case 'state3':
+    data.state.value = 'state1'
+    break
+}

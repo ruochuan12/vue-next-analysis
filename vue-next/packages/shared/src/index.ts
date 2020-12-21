@@ -19,7 +19,7 @@ export * from './toDisplayString'
  * for ES2020. This will need to be updated as the spec moves forward.
  * Full list at https://babeljs.io/docs/en/next/babel-parser#plugins
  */
-export const babelParserDefautPlugins = [
+export const babelParserDefaultPlugins = [
   'bigInt',
   'optionalChaining',
   'nullishCoalescingOperator'
@@ -28,7 +28,7 @@ export const babelParserDefautPlugins = [
 export const EMPTY_OBJ: { readonly [key: string]: any } = __DEV__
   ? Object.freeze({})
   : {}
-export const EMPTY_ARR: [] = []
+export const EMPTY_ARR = __DEV__ ? Object.freeze([]) : []
 
 export const NOOP = () => {}
 
@@ -58,6 +58,11 @@ export const hasOwn = (
 ): key is keyof typeof val => hasOwnProperty.call(val, key)
 
 export const isArray = Array.isArray
+export const isMap = (val: unknown): val is Map<any, any> =>
+  toTypeString(val) === '[object Map]'
+export const isSet = (val: unknown): val is Set<any> =>
+  toTypeString(val) === '[object Set]'
+
 export const isDate = (val: unknown): val is Date => val instanceof Date
 export const isFunction = (val: unknown): val is Function =>
   typeof val === 'function'
@@ -75,14 +80,22 @@ export const toTypeString = (value: unknown): string =>
   objectToString.call(value)
 
 export const toRawType = (value: unknown): string => {
+  // extract "RawType" from strings like "[object RawType]"
   return toTypeString(value).slice(8, -1)
 }
 
 export const isPlainObject = (val: unknown): val is object =>
   toTypeString(val) === '[object Object]'
 
+export const isIntegerKey = (key: unknown) =>
+  isString(key) &&
+  key !== 'NaN' &&
+  key[0] !== '-' &&
+  '' + parseInt(key, 10) === key
+
 export const isReservedProp = /*#__PURE__*/ makeMap(
-  'key,ref,' +
+  // the leading comma is intentional so empty string "" is also included
+  ',key,ref,' +
     'onVnodeBeforeMount,onVnodeMounted,' +
     'onVnodeBeforeUpdate,onVnodeUpdated,' +
     'onVnodeBeforeUnmount,onVnodeUnmounted'
@@ -110,19 +123,22 @@ const hyphenateRE = /\B([A-Z])/g
 /**
  * @private
  */
-export const hyphenate = cacheStringFunction(
-  (str: string): string => {
-    return str.replace(hyphenateRE, '-$1').toLowerCase()
-  }
+export const hyphenate = cacheStringFunction((str: string) =>
+  str.replace(hyphenateRE, '-$1').toLowerCase()
 )
 
 /**
  * @private
  */
 export const capitalize = cacheStringFunction(
-  (str: string): string => {
-    return str.charAt(0).toUpperCase() + str.slice(1)
-  }
+  (str: string) => str.charAt(0).toUpperCase() + str.slice(1)
+)
+
+/**
+ * @private
+ */
+export const toHandlerKey = cacheStringFunction(
+  (str: string) => (str ? `on${capitalize(str)}` : ``)
 )
 
 // compare whether a value has changed, accounting for NaN.

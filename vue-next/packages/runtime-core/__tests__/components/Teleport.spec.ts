@@ -7,10 +7,11 @@ import {
   Text,
   ref,
   nextTick,
-  markRaw
+  markRaw,
+  defineComponent
 } from '@vue/runtime-test'
 import { createVNode, Fragment } from '../../src/vnode'
-import { compile } from 'vue'
+import { compile, render as domRender } from 'vue'
 
 describe('renderer: teleport', () => {
   test('should work', () => {
@@ -31,6 +32,37 @@ describe('renderer: teleport', () => {
     expect(serializeInner(target)).toMatchInlineSnapshot(
       `"<div>teleported</div>"`
     )
+  })
+
+  test('should work with SVG', async () => {
+    const root = document.createElement('div')
+    const svg = ref()
+    const circle = ref()
+
+    const Comp = defineComponent({
+      setup() {
+        return {
+          svg,
+          circle
+        }
+      },
+      template: `
+      <svg ref="svg"></svg>
+      <teleport :to="svg" v-if="svg">
+      <circle ref="circle"></circle>
+      </teleport>`
+    })
+
+    domRender(h(Comp), root)
+
+    await nextTick()
+
+    expect(root.innerHTML).toMatchInlineSnapshot(
+      `"<svg><circle></circle></svg><!--teleport start--><!--teleport end-->"`
+    )
+
+    expect(svg.value.namespaceURI).toBe('http://www.w3.org/2000/svg')
+    expect(circle.value.namespaceURI).toBe('http://www.w3.org/2000/svg')
   })
 
   test('should update target', async () => {
@@ -179,6 +211,36 @@ describe('renderer: teleport', () => {
     )
   })
 
+  test('should work when using template ref as target', async () => {
+    const root = nodeOps.createElement('div')
+    const target = ref(null)
+    const disabled = ref(true)
+
+    const App = {
+      setup() {
+        return () =>
+          h(Fragment, [
+            h('div', { ref: target }),
+            h(
+              Teleport,
+              { to: target.value, disabled: disabled.value },
+              h('div', 'teleported')
+            )
+          ])
+      }
+    }
+    render(h(App), root)
+    expect(serializeInner(root)).toMatchInlineSnapshot(
+      `"<div></div><!--teleport start--><div>teleported</div><!--teleport end-->"`
+    )
+
+    disabled.value = false
+    await nextTick()
+    expect(serializeInner(root)).toMatchInlineSnapshot(
+      `"<div><div>teleported</div></div><!--teleport start--><!--teleport end-->"`
+    )
+  })
+
   test('disabled', () => {
     const target = nodeOps.createElement('div')
     const root = nodeOps.createElement('div')
@@ -316,7 +378,7 @@ describe('renderer: teleport', () => {
       },
       render: compile(`
       <teleport :to="target" :disabled="disabled">
-        <div>teleported</div><span>{{ disabled }}</span>
+        <div>teleported</div><span>{{ disabled }}</span><span v-if="disabled"/>
       </teleport>
       <div>root</div>
       `)
@@ -326,13 +388,13 @@ describe('renderer: teleport', () => {
       `"<!--teleport start--><!--teleport end--><div>root</div>"`
     )
     expect(serializeInner(target)).toMatchInlineSnapshot(
-      `"<div>teleported</div><span>false</span>"`
+      `"<div>teleported</div><span>false</span><!--v-if-->"`
     )
 
     disabled.value = true
     await nextTick()
     expect(serializeInner(root)).toMatchInlineSnapshot(
-      `"<!--teleport start--><div>teleported</div><span>true</span><!--teleport end--><div>root</div>"`
+      `"<!--teleport start--><div>teleported</div><span>true</span><span></span><!--teleport end--><div>root</div>"`
     )
     expect(serializeInner(target)).toBe(``)
 
@@ -343,7 +405,7 @@ describe('renderer: teleport', () => {
       `"<!--teleport start--><!--teleport end--><div>root</div>"`
     )
     expect(serializeInner(target)).toMatchInlineSnapshot(
-      `"<div>teleported</div><span>false</span>"`
+      `"<div>teleported</div><span>false</span><!--v-if-->"`
     )
   })
 })

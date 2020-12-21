@@ -2,7 +2,7 @@ import { App } from './apiCreateApp'
 import { Fragment, Text, Comment, Static } from './vnode'
 import { ComponentInternalInstance } from './component'
 
-export interface AppRecord {
+interface AppRecord {
   id: number
   app: App
   version: string
@@ -14,10 +14,11 @@ const enum DevtoolsHooks {
   APP_UNMOUNT = 'app:unmount',
   COMPONENT_UPDATED = 'component:updated',
   COMPONENT_ADDED = 'component:added',
-  COMPONENT_REMOVED = 'component:removed'
+  COMPONENT_REMOVED = 'component:removed',
+  COMPONENT_EMIT = 'component:emit'
 }
 
-export interface DevtoolsHook {
+interface DevtoolsHook {
   emit: (event: string, ...payload: any[]) => void
   on: (event: string, handler: Function) => void
   once: (event: string, handler: Function) => void
@@ -47,26 +48,42 @@ export function devtoolsUnmountApp(app: App) {
   devtools.emit(DevtoolsHooks.APP_UNMOUNT, app)
 }
 
-export const devtoolsComponentAdded = /*#__PURE__*/ createDevtoolsHook(
+export const devtoolsComponentAdded = /*#__PURE__*/ createDevtoolsComponentHook(
   DevtoolsHooks.COMPONENT_ADDED
 )
 
-export const devtoolsComponentUpdated = /*#__PURE__*/ createDevtoolsHook(
+export const devtoolsComponentUpdated = /*#__PURE__*/ createDevtoolsComponentHook(
   DevtoolsHooks.COMPONENT_UPDATED
 )
 
-export const devtoolsComponentRemoved = /*#__PURE__*/ createDevtoolsHook(
+export const devtoolsComponentRemoved = /*#__PURE__*/ createDevtoolsComponentHook(
   DevtoolsHooks.COMPONENT_REMOVED
 )
 
-function createDevtoolsHook(hook: DevtoolsHooks) {
+function createDevtoolsComponentHook(hook: DevtoolsHooks) {
   return (component: ComponentInternalInstance) => {
     if (!devtools) return
     devtools.emit(
       hook,
       component.appContext.app,
       component.uid,
-      component.parent ? component.parent.uid : undefined
+      component.parent ? component.parent.uid : undefined,
+      component
     )
   }
+}
+
+export function devtoolsComponentEmit(
+  component: ComponentInternalInstance,
+  event: string,
+  params: any[]
+) {
+  if (!devtools) return
+  devtools.emit(
+    DevtoolsHooks.COMPONENT_EMIT,
+    component.appContext.app,
+    component,
+    event,
+    params
+  )
 }

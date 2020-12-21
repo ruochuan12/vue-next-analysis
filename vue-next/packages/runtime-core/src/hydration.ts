@@ -226,8 +226,8 @@ export function createHydrationFunctions(
         }
     }
 
-    if (ref != null && parentComponent) {
-      setRef(ref, null, parentComponent, parentSuspense, vnode)
+    if (ref != null) {
+      setRef(ref, null, parentSuspense, vnode)
     }
 
     return nextNode
@@ -244,6 +244,9 @@ export function createHydrationFunctions(
     const { props, patchFlag, shapeFlag, dirs } = vnode
     // skip props & children if this is hoisted static nodes
     if (patchFlag !== PatchFlags.HOISTED) {
+      if (dirs) {
+        invokeDirectiveHook(vnode, null, parentComponent, 'created')
+      }
       // props
       if (props) {
         if (
@@ -323,14 +326,14 @@ export function createHydrationFunctions(
 
   const hydrateChildren = (
     node: Node | null,
-    vnode: VNode,
+    parentVNode: VNode,
     container: Element,
     parentComponent: ComponentInternalInstance | null,
     parentSuspense: SuspenseBoundary | null,
     optimized: boolean
   ): Node | null => {
-    optimized = optimized || !!vnode.dynamicChildren
-    const children = vnode.children as VNode[]
+    optimized = optimized || !!parentVNode.dynamicChildren
+    const children = parentVNode.children as VNode[]
     const l = children.length
     let hasWarned = false
     for (let i = 0; i < l; i++) {

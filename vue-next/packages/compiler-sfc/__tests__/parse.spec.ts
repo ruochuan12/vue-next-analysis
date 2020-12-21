@@ -33,6 +33,20 @@ describe('compiler:sfc', () => {
         expect(mapping.originalLine - mapping.generatedLine).toBe(padding)
       })
     })
+
+    test('custom block', () => {
+      const padding = Math.round(Math.random() * 10)
+      const custom = parse(
+        `${'\n'.repeat(padding)}<i18n>\n{\n  "greeting": "hello"\n}\n</i18n>\n`
+      ).descriptor.customBlocks[0]
+
+      expect(custom!.map).not.toBeUndefined()
+
+      const consumer = new SourceMapConsumer(custom!.map!)
+      consumer.eachMapping(mapping => {
+        expect(mapping.originalLine - mapping.generatedLine).toBe(padding)
+      })
+    })
   })
 
   test('pad content', () => {
@@ -45,11 +59,16 @@ export default {}
 </script>
 <style>
 h1 { color: red }
-</style>`
+</style>
+<i18n>
+{ "greeting": "hello" }
+</i18n>
+`
     const padFalse = parse(content.trim(), { pad: false }).descriptor
     expect(padFalse.template!.content).toBe('\n<div></div>\n')
     expect(padFalse.script!.content).toBe('\nexport default {}\n')
     expect(padFalse.styles[0].content).toBe('\nh1 { color: red }\n')
+    expect(padFalse.customBlocks[0].content).toBe('\n{ "greeting": "hello" }\n')
 
     const padTrue = parse(content.trim(), { pad: true }).descriptor
     expect(padTrue.script!.content).toBe(
@@ -58,6 +77,9 @@ h1 { color: red }
     expect(padTrue.styles[0].content).toBe(
       Array(6 + 1).join('\n') + '\nh1 { color: red }\n'
     )
+    expect(padTrue.customBlocks[0].content).toBe(
+      Array(9 + 1).join('\n') + '\n{ "greeting": "hello" }\n'
+    )
 
     const padLine = parse(content.trim(), { pad: 'line' }).descriptor
     expect(padLine.script!.content).toBe(
@@ -65,6 +87,9 @@ h1 { color: red }
     )
     expect(padLine.styles[0].content).toBe(
       Array(6 + 1).join('\n') + '\nh1 { color: red }\n'
+    )
+    expect(padLine.customBlocks[0].content).toBe(
+      Array(9 + 1).join('\n') + '\n{ "greeting": "hello" }\n'
     )
 
     const padSpace = parse(content.trim(), { pad: 'space' }).descriptor
@@ -78,10 +103,21 @@ h1 { color: red }
         ' '
       ) + '\nh1 { color: red }\n'
     )
+    expect(padSpace.customBlocks[0].content).toBe(
+      `<template>\n<div></div>\n</template>\n<script>\nexport default {}\n</script>\n<style>\nh1 { color: red }\n</style>\n<i18n>`.replace(
+        /./g,
+        ' '
+      ) + '\n{ "greeting": "hello" }\n'
+    )
   })
 
-  test('should ignore nodes with no content', () => {
-    expect(parse(`<template/>`).descriptor.template).toBe(null)
+  test('should keep template nodes with no content', () => {
+    const { descriptor } = parse(`<template/>`)
+    expect(descriptor.template).toBeTruthy()
+    expect(descriptor.template!.content).toBeFalsy()
+  })
+
+  test('should ignore other nodes with no content', () => {
     expect(parse(`<script/>`).descriptor.script).toBe(null)
     expect(parse(`<style/>`).descriptor.styles.length).toBe(0)
     expect(parse(`<custom/>`).descriptor.customBlocks.length).toBe(0)
@@ -111,6 +147,18 @@ h1 { color: red }
     )
     expect(errors.length).toBe(0)
     expect(descriptor.template!.content).toBe(content)
+  })
+
+  //#2566
+  test('div lang should not be treated as plain text', () => {
+    const { errors } = parse(`
+    <template lang="pug">
+      <div lang="">
+        <div></div>
+      </div>
+    </template>
+    `)
+    expect(errors.length).toBe(0)
   })
 
   test('error tolerance', () => {

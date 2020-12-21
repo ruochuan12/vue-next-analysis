@@ -9,7 +9,6 @@ import {
   createVNode,
   Comment,
   cloneVNode,
-  Fragment,
   VNodeArrayChildren,
   isVNode
 } from './vnode'
@@ -17,9 +16,13 @@ import { handleError, ErrorCodes } from './errorHandling'
 import { PatchFlags, ShapeFlags, isOn, isModelListener } from '@vue/shared'
 import { warn } from './warning'
 import { isHmrUpdating } from './hmr'
+import { NormalizedProps } from './componentProps'
+import { isEmitListener } from './componentEmits'
 
-// mark the current rendering instance for asset resolution (e.g.
-// resolveComponent, resolveDirective) during render
+/**
+ * mark the current rendering instance for asset resolution (e.g.
+ * resolveComponent, resolveDirective) during render
+ */
 export let currentRenderingInstance: ComponentInternalInstance | null = null
 
 export function setCurrentRenderingInstance(
@@ -28,9 +31,11 @@ export function setCurrentRenderingInstance(
   currentRenderingInstance = instance
 }
 
-// dev only flag to track whether $attrs was used during render.
-// If $attrs was used during render then the warning for failed attrs
-// fallthrough can be suppressed.
+/**
+ * dev only flag to track whether $attrs was used during render.
+ * If $attrs was used during render then the warning for failed attrs
+ * fallthrough can be suppressed.
+ */
 let accessedAttrs: boolean = false
 
 export function markAttrsAccessed() {
@@ -42,11 +47,11 @@ export function renderComponentRoot(
 ): VNode {
   const {
     type: Component,
-    parent,
     vnode,
     proxy,
     withProxy,
     props,
+    propsOptions: [propsOptions],
     slots,
     attrs,
     emit,
@@ -114,7 +119,7 @@ export function renderComponentRoot(
     // to have comments along side the root element which makes it a fragment
     let root = result
     let setRoot: ((root: VNode) => void) | undefined = undefined
-    if (__DEV__) {
+    if (__DEV__ && result.patchFlag & PatchFlags.DEV_ROOT_FRAGMENT) {
       ;[root, setRoot] = getChildRoot(result)
     }
 
@@ -126,11 +131,15 @@ export function renderComponentRoot(
           shapeFlag & ShapeFlags.ELEMENT ||
           shapeFlag & ShapeFlags.COMPONENT
         ) {
-          if (shapeFlag & ShapeFlags.ELEMENT && keys.some(isModelListener)) {
-            // #1643, #1543
-            // component v-model listeners should only fallthrough for component
-            // HOCs
-            fallthroughAttrs = filterModelListeners(fallthroughAttrs)
+          if (propsOptions && keys.some(isModelListener)) {
+            // If a v-model listener (onUpdate:xxx) has a corresponding declared
+            // prop, it indicates this component expects to handle v-model and
+            // it should not fallthrough.
+            // related: #1543, #1643, #1989
+            fallthroughAttrs = filterModelListeners(
+              fallthroughAttrs,
+              propsOptions
+            )
           }
           root = cloneVNode(root, fallthroughAttrs)
         } else if (__DEV__ && !accessedAttrs && root.type !== Comment) {
@@ -172,22 +181,6 @@ export function renderComponentRoot(
       }
     }
 
-    // inherit scopeId
-    const scopeId = vnode.scopeId
-    // vite#536: if subtree root is created from parent slot if would already
-    // have the correct scopeId, in this case adding the scopeId will cause
-    // it to be removed if the original slot vnode is reused.
-    const needScopeId = scopeId && root.scopeId !== scopeId
-    const treeOwnerId = parent && parent.type.__scopeId
-    const slotScopeId =
-      treeOwnerId && treeOwnerId !== scopeId ? treeOwnerId + '-s' : null
-    if (needScopeId || slotScopeId) {
-      const extras: Data = {}
-      if (needScopeId) extras[scopeId!] = ''
-      if (slotScopeId) extras[slotScopeId] = ''
-      root = cloneVNode(root, extras)
-    }
-
     // inherit directives
     if (vnode.dirs) {
       if (__DEV__ && !isElementRoot(root)) {
@@ -196,7 +189,7 @@ export function renderComponentRoot(
             `The directives will not function as intended.`
         )
       }
-      root.dirs = vnode.dirs
+      root.dirs = root.dirs ? root.dirs.concat(vnode.dirs) : vnode.dirs
     }
     // inherit transition data
     if (vnode.transition) {
@@ -225,37 +218,55 @@ export function renderComponentRoot(
 
 /**
  * dev only
+ * In dev mode, template root level comments are rendered, which turns the
+ * template into a fragment root, but we need to locate the single element
+ * root for attrs and scope id processing.
  */
 const getChildRoot = (
   vnode: VNode
 ): [VNode, ((root: VNode) => void) | undefined] => {
-  if (vnode.type !== Fragment) {
-    return [vnode, undefined]
-  }
   const rawChildren = vnode.children as VNodeArrayChildren
-  const dynamicChildren = vnode.dynamicChildren as VNodeArrayChildren
-  const children = rawChildren.filter(child => {
-    return !(
-      isVNode(child) &&
-      child.type === Comment &&
-      child.children !== 'v-if'
-    )
-  })
-  if (children.length !== 1) {
+  const dynamicChildren = vnode.dynamicChildren
+  const childRoot = filterSingleRoot(rawChildren)
+  if (!childRoot) {
     return [vnode, undefined]
   }
-  const childRoot = children[0]
   const index = rawChildren.indexOf(childRoot)
   const dynamicIndex = dynamicChildren ? dynamicChildren.indexOf(childRoot) : -1
   const setRoot = (updatedRoot: VNode) => {
     rawChildren[index] = updatedRoot
-    if (dynamicIndex > -1) {
-      dynamicChildren[dynamicIndex] = updatedRoot
-    } else if (dynamicChildren && updatedRoot.patchFlag > 0) {
-      dynamicChildren.push(updatedRoot)
+    if (dynamicChildren) {
+      if (dynamicIndex > -1) {
+        dynamicChildren[dynamicIndex] = updatedRoot
+      } else if (updatedRoot.patchFlag > 0) {
+        vnode.dynamicChildren = [...dynamicChildren, updatedRoot]
+      }
     }
   }
   return [normalizeVNode(childRoot), setRoot]
+}
+
+export function filterSingleRoot(
+  children: VNodeArrayChildren
+): VNode | undefined {
+  let singleRoot
+  for (let i = 0; i < children.length; i++) {
+    const child = children[i]
+    if (isVNode(child)) {
+      // ignore user comment
+      if (child.type !== Comment || child.children === 'v-if') {
+        if (singleRoot) {
+          // has more than 1 non-comment child, return now
+          return
+        } else {
+          singleRoot = child
+        }
+      }
+    } else {
+      return
+    }
+  }
+  return singleRoot
 }
 
 const getFunctionalFallthrough = (attrs: Data): Data | undefined => {
@@ -268,10 +279,10 @@ const getFunctionalFallthrough = (attrs: Data): Data | undefined => {
   return res
 }
 
-const filterModelListeners = (attrs: Data): Data => {
+const filterModelListeners = (attrs: Data, props: NormalizedProps): Data => {
   const res: Data = {}
   for (const key in attrs) {
-    if (!isModelListener(key)) {
+    if (!isModelListener(key) || !(key.slice(9) in props)) {
       res[key] = attrs[key]
     }
   }
@@ -291,8 +302,9 @@ export function shouldUpdateComponent(
   nextVNode: VNode,
   optimized?: boolean
 ): boolean {
-  const { props: prevProps, children: prevChildren } = prevVNode
+  const { props: prevProps, children: prevChildren, component } = prevVNode
   const { props: nextProps, children: nextChildren, patchFlag } = nextVNode
+  const emits = component!.emitsOptions
 
   // Parent component's render function was hot-updated. Since this may have
   // caused the child component's slots content to have changed, we need to
@@ -306,7 +318,7 @@ export function shouldUpdateComponent(
     return true
   }
 
-  if (optimized && patchFlag > 0) {
+  if (optimized && patchFlag >= 0) {
     if (patchFlag & PatchFlags.DYNAMIC_SLOTS) {
       // slot content that references values that might have changed,
       // e.g. in a v-for
@@ -317,12 +329,15 @@ export function shouldUpdateComponent(
         return !!nextProps
       }
       // presence of this flag indicates props are always non-null
-      return hasPropsChanged(prevProps, nextProps!)
+      return hasPropsChanged(prevProps, nextProps!, emits)
     } else if (patchFlag & PatchFlags.PROPS) {
       const dynamicProps = nextVNode.dynamicProps!
       for (let i = 0; i < dynamicProps.length; i++) {
         const key = dynamicProps[i]
-        if (nextProps![key] !== prevProps![key]) {
+        if (
+          nextProps![key] !== prevProps![key] &&
+          !isEmitListener(emits, key)
+        ) {
           return true
         }
       }
@@ -344,20 +359,27 @@ export function shouldUpdateComponent(
     if (!nextProps) {
       return true
     }
-    return hasPropsChanged(prevProps, nextProps)
+    return hasPropsChanged(prevProps, nextProps, emits)
   }
 
   return false
 }
 
-function hasPropsChanged(prevProps: Data, nextProps: Data): boolean {
+function hasPropsChanged(
+  prevProps: Data,
+  nextProps: Data,
+  emitsOptions: ComponentInternalInstance['emitsOptions']
+): boolean {
   const nextKeys = Object.keys(nextProps)
   if (nextKeys.length !== Object.keys(prevProps).length) {
     return true
   }
   for (let i = 0; i < nextKeys.length; i++) {
     const key = nextKeys[i]
-    if (nextProps[key] !== prevProps[key]) {
+    if (
+      nextProps[key] !== prevProps[key] &&
+      !isEmitListener(emitsOptions, key)
+    ) {
       return true
     }
   }

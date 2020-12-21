@@ -5,7 +5,12 @@ import {
   nodeOps,
   serializeInner,
   nextTick,
-  VNode
+  VNode,
+  provide,
+  inject,
+  Ref,
+  watch,
+  SetupContext
 } from '@vue/runtime-test'
 
 describe('renderer: component', () => {
@@ -80,5 +85,194 @@ describe('renderer: component', () => {
     }
     render(h(Comp2), root)
     expect(serializeInner(root)).toBe('<span>foo</span>')
+  })
+
+  // #2072
+  it('should not update Component if only changed props are declared emit listeners', () => {
+    const Comp1 = {
+      emits: ['foo'],
+      updated: jest.fn(),
+      render: () => null
+    }
+    const root = nodeOps.createElement('div')
+    render(
+      h(Comp1, {
+        onFoo: () => {}
+      }),
+      root
+    )
+    render(
+      h(Comp1, {
+        onFoo: () => {}
+      }),
+      root
+    )
+    expect(Comp1.updated).not.toHaveBeenCalled()
+  })
+
+  // #2043
+  test('component child synchronously updating parent state should trigger parent re-render', async () => {
+    const App = {
+      setup() {
+        const n = ref(0)
+        provide('foo', n)
+        return () => {
+          return [h('div', n.value), h(Child)]
+        }
+      }
+    }
+
+    const Child = {
+      setup() {
+        const n = inject<Ref<number>>('foo')!
+        n.value++
+
+        return () => {
+          return h('div', n.value)
+        }
+      }
+    }
+
+    const root = nodeOps.createElement('div')
+    render(h(App), root)
+    expect(serializeInner(root)).toBe(`<div>0</div><div>1</div>`)
+    await nextTick()
+    expect(serializeInner(root)).toBe(`<div>1</div><div>1</div>`)
+  })
+
+  // #2170
+  test('instance.$el should be exposed to watch options', async () => {
+    function returnThis(this: any, _arg: any) {
+      return this
+    }
+    const propWatchSpy = jest.fn(returnThis)
+    const dataWatchSpy = jest.fn(returnThis)
+    let instance: any
+    const Comp = {
+      props: {
+        testProp: String
+      },
+
+      data() {
+        return {
+          testData: undefined
+        }
+      },
+
+      watch: {
+        testProp() {
+          // @ts-ignore
+          propWatchSpy(this.$el)
+        },
+        testData() {
+          // @ts-ignore
+          dataWatchSpy(this.$el)
+        }
+      },
+
+      created() {
+        instance = this
+      },
+
+      render() {
+        return h('div')
+      }
+    }
+
+    const root = nodeOps.createElement('div')
+    render(h(Comp), root)
+    await nextTick()
+    expect(propWatchSpy).not.toHaveBeenCalled()
+    expect(dataWatchSpy).not.toHaveBeenCalled()
+
+    render(h(Comp, { testProp: 'prop ' }), root)
+    await nextTick()
+    expect(propWatchSpy).toHaveBeenCalledWith(instance.$el)
+
+    instance.testData = 1
+    await nextTick()
+    expect(dataWatchSpy).toHaveBeenCalledWith(instance.$el)
+  })
+
+  // #2200
+  test('component child updating parent state in pre-flush should trigger parent re-render', async () => {
+    const outer = ref(0)
+    const App = {
+      setup() {
+        const inner = ref(0)
+
+        return () => {
+          return [
+            h('div', inner.value),
+            h(Child, {
+              value: outer.value,
+              onUpdate: (val: number) => (inner.value = val)
+            })
+          ]
+        }
+      }
+    }
+
+    const Child = {
+      props: ['value'],
+      setup(props: any, { emit }: SetupContext) {
+        watch(() => props.value, (val: number) => emit('update', val))
+
+        return () => {
+          return h('div', props.value)
+        }
+      }
+    }
+
+    const root = nodeOps.createElement('div')
+    render(h(App), root)
+    expect(serializeInner(root)).toBe(`<div>0</div><div>0</div>`)
+
+    outer.value++
+    await nextTick()
+    expect(serializeInner(root)).toBe(`<div>1</div><div>1</div>`)
+  })
+
+  // #2521
+  test('should pause tracking deps when initializing legacy options', async () => {
+    let childInstance = null as any
+    const Child = {
+      props: ['foo'],
+      data() {
+        return {
+          count: 0
+        }
+      },
+      watch: {
+        foo: {
+          immediate: true,
+          handler() {
+            ;(this as any).count
+          }
+        }
+      },
+      created() {
+        childInstance = this as any
+        childInstance.count
+      },
+      render() {
+        return h('h1', (this as any).count)
+      }
+    }
+
+    const App = {
+      setup() {
+        return () => h(Child)
+      },
+      updated: jest.fn()
+    }
+
+    const root = nodeOps.createElement('div')
+    render(h(App), root)
+    expect(App.updated).toHaveBeenCalledTimes(0)
+
+    childInstance.count++
+    await nextTick()
+    expect(App.updated).toHaveBeenCalledTimes(0)
   })
 })

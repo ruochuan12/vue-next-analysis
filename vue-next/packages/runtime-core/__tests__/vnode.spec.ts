@@ -12,7 +12,7 @@ import {
 } from '../src/vnode'
 import { Data } from '../src/component'
 import { ShapeFlags, PatchFlags } from '@vue/shared'
-import { h, reactive, isReactive } from '../src'
+import { h, reactive, isReactive, setBlockTracking } from '../src'
 import { createApp, nodeOps, serializeInner } from '@vue/runtime-test'
 import { setCurrentRenderingInstance } from '../src/componentRenderUtils'
 
@@ -40,6 +40,12 @@ describe('vnode', () => {
     const vnode = createVNode('p', null)
     expect(vnode.type).toBe('p')
     expect(vnode.props).toBe(null)
+  })
+
+  test('show warn when create with invalid type', () => {
+    const vnode = createVNode('')
+    expect('Invalid vnode type when creating vnode').toHaveBeenWarned()
+    expect(vnode.type).toBe(Comment)
   })
 
   test('create from an existing vnode', () => {
@@ -130,10 +136,10 @@ describe('vnode', () => {
     })
 
     test('object', () => {
-      const vnode = createVNode('p', null, { foo: 'foo' })
+      const vnode = createVNode({}, null, { foo: 'foo' })
       expect(vnode.children).toMatchObject({ foo: 'foo' })
       expect(vnode.shapeFlag).toBe(
-        ShapeFlags.ELEMENT | ShapeFlags.SLOTS_CHILDREN
+        ShapeFlags.STATEFUL_COMPONENT | ShapeFlags.SLOTS_CHILDREN
       )
     })
 
@@ -230,20 +236,20 @@ describe('vnode', () => {
 
     setCurrentRenderingInstance(mockInstance1)
     const original = createVNode('div', { ref: 'foo' })
-    expect(original.ref).toEqual([mockInstance1, 'foo'])
+    expect(original.ref).toStrictEqual({ i: mockInstance1, r: 'foo' })
 
     // clone and preserve original ref
     const cloned1 = cloneVNode(original)
-    expect(cloned1.ref).toEqual([mockInstance1, 'foo'])
+    expect(cloned1.ref).toStrictEqual({ i: mockInstance1, r: 'foo' })
 
     // cloning with new ref, but with same context instance
     const cloned2 = cloneVNode(original, { ref: 'bar' })
-    expect(cloned2.ref).toEqual([mockInstance1, 'bar'])
+    expect(cloned2.ref).toStrictEqual({ i: mockInstance1, r: 'bar' })
 
     // cloning and adding ref to original that has no ref
     const original2 = createVNode('div')
     const cloned3 = cloneVNode(original2, { ref: 'bar' })
-    expect(cloned3.ref).toEqual([mockInstance1, 'bar'])
+    expect(cloned3.ref).toStrictEqual({ i: mockInstance1, r: 'bar' })
 
     // cloning with different context instance
     setCurrentRenderingInstance(mockInstance2)
@@ -251,18 +257,87 @@ describe('vnode', () => {
     // clone and preserve original ref
     const cloned4 = cloneVNode(original)
     // #1311 should preserve original context instance!
-    expect(cloned4.ref).toEqual([mockInstance1, 'foo'])
+    expect(cloned4.ref).toStrictEqual({ i: mockInstance1, r: 'foo' })
 
     // cloning with new ref, but with same context instance
     const cloned5 = cloneVNode(original, { ref: 'bar' })
     // new ref should use current context instance and overwrite original
-    expect(cloned5.ref).toEqual([mockInstance2, 'bar'])
+    expect(cloned5.ref).toStrictEqual({ i: mockInstance2, r: 'bar' })
 
     // cloning and adding ref to original that has no ref
     const cloned6 = cloneVNode(original2, { ref: 'bar' })
-    expect(cloned6.ref).toEqual([mockInstance2, 'bar'])
+    expect(cloned6.ref).toStrictEqual({ i: mockInstance2, r: 'bar' })
 
     setCurrentRenderingInstance(null)
+  })
+
+  test('cloneVNode ref merging', () => {
+    const mockInstance1 = {} as any
+    const mockInstance2 = {} as any
+
+    setCurrentRenderingInstance(mockInstance1)
+    const original = createVNode('div', { ref: 'foo' })
+    expect(original.ref).toStrictEqual({ i: mockInstance1, r: 'foo' })
+
+    // clone and preserve original ref
+    setCurrentRenderingInstance(mockInstance2)
+    const cloned1 = cloneVNode(original, { ref: 'bar' }, true)
+    expect(cloned1.ref).toStrictEqual([
+      { i: mockInstance1, r: 'foo' },
+      { i: mockInstance2, r: 'bar' }
+    ])
+
+    setCurrentRenderingInstance(null)
+  })
+
+  test('cloneVNode class normalization', () => {
+    const vnode = createVNode('div')
+    const expectedProps = {
+      class: 'a b'
+    }
+    expect(cloneVNode(vnode, { class: 'a b' }).props).toMatchObject(
+      expectedProps
+    )
+    expect(cloneVNode(vnode, { class: ['a', 'b'] }).props).toMatchObject(
+      expectedProps
+    )
+    expect(
+      cloneVNode(vnode, { class: { a: true, b: true } }).props
+    ).toMatchObject(expectedProps)
+    expect(
+      cloneVNode(vnode, { class: [{ a: true, b: true }] }).props
+    ).toMatchObject(expectedProps)
+  })
+
+  test('cloneVNode style normalization', () => {
+    const vnode = createVNode('div')
+    const expectedProps = {
+      style: {
+        color: 'blue',
+        width: '300px'
+      }
+    }
+    expect(
+      cloneVNode(vnode, { style: 'color: blue; width: 300px;' }).props
+    ).toMatchObject(expectedProps)
+    expect(
+      cloneVNode(vnode, {
+        style: {
+          color: 'blue',
+          width: '300px'
+        }
+      }).props
+    ).toMatchObject(expectedProps)
+    expect(
+      cloneVNode(vnode, {
+        style: [
+          {
+            color: 'blue',
+            width: '300px'
+          }
+        ]
+      }).props
+    ).toMatchObject(expectedProps)
   })
 
   describe('mergeProps', () => {
@@ -440,7 +515,7 @@ describe('vnode', () => {
     //   slot content (called during the block node creation) to be missed
     test('element block should track normalized slot children', () => {
       const hoist = createVNode('div')
-      let vnode1
+      let vnode1: any
       const vnode = (openBlock(),
       createBlock('div', null, {
         default: () => {
@@ -484,6 +559,18 @@ describe('vnode', () => {
       ]))
       expect(vnode.dynamicChildren).toStrictEqual([vnode1])
       expect(vnode1.dynamicChildren).toStrictEqual([vnode2])
+    })
+
+    test('should not track openBlock() when tracking is disabled', () => {
+      let vnode1
+      const vnode = (openBlock(),
+      createBlock('div', null, [
+        setBlockTracking(-1),
+        (vnode1 = (openBlock(), createBlock('div'))),
+        setBlockTracking(1),
+        vnode1
+      ]))
+      expect(vnode.dynamicChildren).toStrictEqual([])
     })
   })
 
