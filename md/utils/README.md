@@ -3,7 +3,7 @@ theme: smartblue
 highlight: dracula
 ---
 
-# Vue 3 中 那些实用的工具函数
+# Vue3 源码中那些实用的工具函数
 
 ## 1. 前言
 
@@ -11,7 +11,8 @@ highlight: dracula
 
 写相对很难的源码，耗费了自己的时间和精力，也没收获多少阅读点赞，其实是一件挺受打击的事情。
 
-所以转变思路，写一些相对通俗易懂的文章。其实源码也不是想象的那么难，至少有很多看得懂。比如工具函数。
+所以转变思路，写一些相对通俗易懂的文章。**其实源码也不是想象的那么难，至少有很多看得懂。比如工具函数**。本文通过学习`Vue3`源码中的工具函数模块的源码，学习源码为自己所用。歌德曾说：读一本好书，就是在和高尚的人谈话。
+同理可得：读源码，也算是和作者的一种学习交流的方式。
 
 阅读本文，你将学到：
 
@@ -24,10 +25,12 @@ highlight: dracula
 
 ## 2. 环境准备
 
+### 2.1 读开源项目 贡献指南
+
 打开 [vue-next](https://github.com/vuejs/vue-next)，
 开源项目一般都能在 `README.md` 或者 [.github/contributing.md](https://github.com/vuejs/vue-next/blob/master/.github/contributing.md) 找到贡献指南。
 
-而贡献指南写了很多关于参与项目开发的信息。比如怎么跑起来，项目目录结构是怎样的。怎么投入开发等。
+而贡献指南写了很多关于参与项目开发的信息。比如怎么跑起来，项目目录结构是怎样的。怎么投入开发，需要哪些知识储备等。
 
 我们可以在 [项目目录结构](https://github.com/vuejs/vue-next/blob/master/.github/contributing.md#project-structure) 描述中，找到`shared`模块。
 
@@ -39,9 +42,13 @@ highlight: dracula
 
 也可以用`github1s`访问，速度更快。[github1s packages/shared/src/index.ts](https://github1s.com/vuejs/vue-next/blob/master/packages/shared/src/index.ts)
 
-为了降低文章难度，我按照贡献指南中方法打包把`ts`转成了`js`。
+### 2.2 按照项目指南 打包构建代码
+
+为了降低文章难度，我按照贡献指南中方法打包把`ts`转成了`js`。如果你需要打包，也可以参考下文打包构建。
 
 你需要确保 [Node.js](http://nodejs.org/) 版本是 `10+`, 而且 `yarn` 的版本是 `1.x` [Yarn 1.x](https://yarnpkg.com/en/docs/install)。
+
+你安装的 `Node.js` 版本很可能是低于 `10`。可以
 
 ```bash
 node -v
@@ -64,17 +71,7 @@ yarn build
 
 ## 3. 工具函数
 
-讲述之前，先推荐我认为不错的`JavaScript API`的几篇文章和几本值得读的书。
-
-[JavaScript 对象所有API解析](https://mp.weixin.qq.com/s/Y3nL3GPcxiqb3zK6pEuycg)
-
-[JavaScript 对象所有API解析](https://lxchuan12.gitee.io/js-object-api/)
-
-[MDN JavaScript](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript)
-
-[《JavaScript高级程序设计》第4版](https://book.douban.com/subject/35175321/)
-[《JavaScript 权威指南》第7版](https://book.douban.com/subject/35396470/)
-[《你不知道的JavaScript》上中卷](https://book.douban.com/subject/26351021/)
+主要按照源码 [`vue-next/packages/shared/src/index.ts`](https://github.com/vuejs/vue-next/blob/master/packages/shared/src/index.ts) 的顺序来写。也省去了一些从外部导入的方法。
 
 ### 3.1 babelParserDefaultPlugins  babel 解析默认插件
 
@@ -141,7 +138,28 @@ console.log(EMPTY_ARR.length); // 0
 ```js
 const NOOP = () => { };
 
-// 很多库的源码中都有这样的定义函数
+// 很多库的源码中都有这样的定义函数，比如 jQuery、underscore、lodash 等
+// 使用场景：1. 方便判断， 2. 方便压缩
+// 1. 比如：
+const instance = {
+    render: NOOP
+};
+
+// 条件
+const dev = true;
+if(dev){
+    instance.render = function(){
+        console.log('render');
+    }
+}
+
+// 可以用作判断。
+if(instance.render === NOOP){
+ console.log('i');
+}
+// 2. 再比如：
+// 方便压缩代码
+// 如果是 function(){} ，不方便压缩代码
 ```
 
 ### 3.5 NO 永远返回 false 的函数
@@ -151,9 +169,12 @@ const NOOP = () => { };
  * Always return false.
  */
 const NO = () => false;
+
+// 除了压缩代码的好处外。
+// 一直返回 false
 ```
 
-### 3.6 isOn 判断字符串是不是 on 开头，并且on后首字母不是小写字母
+### 3.6 isOn 判断字符串是不是 on 开头，并且 on 后首字母不是小写字母
 
 ```js
 const onRE = /^on[^a-z]/;
@@ -173,7 +194,9 @@ isOn('on3change'); // true
 const isModelListener = (key) => key.startsWith('onUpdate:');
 
 // 例子：
-
+isModelListener('onUpdate:change'); // true
+isModelListener('1onUpdate:change'); // false
+// startsWith 是 ES6 提供的方法
 ```
 
 ### 3.8 extend 继承 合并
@@ -186,9 +209,9 @@ const extend = Object.assign;
 // 例子：
 const data = { name: '若川' };
 const data2 = entend(data, { mp: '若川视野', name: '是若川啊' });
-console.log(data); // {name: "是若川啊", mp: "若川视野"}
-console.log(data2); // {name: "是若川啊", mp: "若川视野"}
-console.log(data === data2);
+console.log(data); // { name: "是若川啊", mp: "若川视野" }
+console.log(data2); // { name: "是若川啊", mp: "若川视野" }
+console.log(data === data2); // true
 ```
 
 ### 3.9 remove 移除数组的一项
@@ -203,7 +226,7 @@ const remove = (arr, el) => {
 
 // 例子：
 const arr = [1, 2, 3];
-remove([1, 2, 3], 3);
+remove(arr, 3);
 console.log(arr); // [1, 2]
 ```
 
@@ -236,6 +259,13 @@ const hasOwnProperty = Object.prototype.hasOwnProperty;
 const hasOwn = (val, key) => hasOwnProperty.call(val, key);
 
 // 例子：
+
+// 特别提醒：__proto__ 是浏览器实现的原型写法，后面还会用到
+// 现在已经有提供好几个原型相关的API
+// Object.getPrototypeOf
+// Object.setPrototypeOf
+// Object.isPrototypeOf
+
 hasOwn({__proto__: { a: 1 }}, 'a') // false
 hasOwn({ a: undefined }, 'a') // true
 hasOwn({}, 'a') // false
@@ -253,6 +283,7 @@ isArray([]); // true
 const fakeArr = { __proto__: Array.prototype, length: 0 };
 isArray(fakeArr); // false
 fakeArr instanceof Array; // true
+// 所以 instanceof 这种情况 不准确
 ```
 
 ### 3.12 isMap 判断是不是 Map 对象
@@ -261,7 +292,15 @@ fakeArr instanceof Array; // true
 const isMap = (val) => toTypeString(val) === '[object Map]';
 
 // 例子：
+const map = new Map();
+const o = { p: 'Hello World' };
+
+map.set(o, 'content');
+map.get(o); // "content"
+isMap(map); // true
 ```
+
+>ES6 提供了 Map 数据结构。它类似于对象，也是键值对的集合，但是“键”的范围不限于字符串，各种类型的值（包括对象）都可以当作键。也就是说，Object 结构提供了“字符串—值”的对应，Map 结构提供了“值—值”的对应，是一种更完善的 Hash 结构实现。如果你需要“键值对”的数据结构，Map 比 Object 更合适。
 
 ### 3.13 isSet 判断是不是 Set 对象
 
@@ -269,8 +308,13 @@ const isMap = (val) => toTypeString(val) === '[object Map]';
 const isSet = (val) => toTypeString(val) === '[object Set]';
 
 // 例子：
-
+const set = new Set();
+isSet(set); // true
 ```
+
+>`ES6` 提供了新的数据结构 `Set`。它类似于数组，但是成员的值都是唯一的，没有重复的值。
+
+`Set`本身是一个构造函数，用来生成 `Set` 数据结构。
 
 ### 3.14 isDate 判断是不是 Date 对象
 
@@ -281,8 +325,6 @@ const isDate = (val) => val instanceof Date;
 isDate(new Date()); // true
 
 // `instanceof` 操作符左边是右边的实例。但不是很准，但一般够用了。原理是根据原型链向上查找的。
-
-// 特别提醒：__proto__ 是浏览器实现的原型写法
 
 isDate({__proto__ : new Date()); // true
 // 实际上是应该是 Object 才对。
@@ -462,6 +504,8 @@ const def = (obj, key, value) => {
 };
 ```
 
+
+
 ### 3.30 toNumber 转数字
 
 ```js
@@ -489,3 +533,35 @@ const getGlobalThis = () => {
                             : {}));
 };
 ```
+
+## 4. 最后推荐一些文章和书籍
+
+先推荐我认为不错的`JavaScript API`的几篇文章和几本值得读的书。
+
+[JavaScript字符串所有API全解密](https://juejin.cn/post/6844903476720320525)
+
+[【深度长文】JavaScript数组所有API全解密](https://juejin.cn/post/6844903476216987655)
+
+[正则表达式前端使用手册](https://juejin.cn/post/6844903469824868365)
+
+[老姚：《JavaScript 正则表达式迷你书》问世了！](https://juejin.cn/post/6844903501034684430)
+
+[JavaScript 对象所有API解析](https://mp.weixin.qq.com/s/Y3nL3GPcxiqb3zK6pEuycg) https://lxchuan12.gitee.io/js-object-api/
+
+[MDN JavaScript](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript)
+
+[《JavaScript高级程序设计》第4版](https://book.douban.com/subject/35175321/)
+
+[《JavaScript 权威指南》第7版](https://book.douban.com/subject/35396470/)
+
+[阮一峰老师：ES6 入门教程](http://es6.ruanyifeng.com/)
+
+[《你不知道的JavaScript》上中卷](https://book.douban.com/subject/26351021/)
+
+[JavaScript 设计模式与开发实践](https://book.douban.com/subject/26382780/)
+
+我也是从小白看不懂书经历过来的。到现在写文章分享。
+
+我看书的方法：多本书同时看，看相同类似的章节，看完这本可能没懂，看下一本，几本书看下来基本就懂了，一遍没看懂，再看几遍，可以避免遗忘，巩固相关章节。当然，刚开始看书很难受，看不进。这时可以看些视频和动手练习一些简单的项目。比如 https://chinese.freecodecamp.org 网站。看书是系统学习非常好的方法。后来我就是看源码较多。
+
+## 5. 总结
