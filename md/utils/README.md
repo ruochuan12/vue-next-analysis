@@ -186,6 +186,16 @@ isOn('onchange'); // false
 isOn('on3change'); // true
 ```
 
+`onRE` 是正则。`^`符号在开头，则表示是什么开头。而在其他地方是指非。
+
+与之相反的是：`$`符合在结尾，则表示是以什么结尾。
+
+`[^a-z]`是指不是`a`到`z`的小写字母。
+
+同时推荐一个正则在线工具。
+
+[regex101](https://regex101.com)
+
 ### 3.7 isModelListener 监听器
 
 判断字符串是不是以`onUpdate:`开头
@@ -199,6 +209,9 @@ isModelListener('1onUpdate:change'); // false
 // startsWith 是 ES6 提供的方法
 ```
 
+[ES6入门教程：字符串的新增方法](https://es6.ruanyifeng.com/#docs/string-methods)
+
+很多方法都在《ES6入门教程》中有讲到，就不赘述了。
 ### 3.8 extend 继承 合并
 
 说合并可能更准确些。
@@ -265,6 +278,8 @@ const hasOwn = (val, key) => hasOwnProperty.call(val, key);
 // Object.getPrototypeOf
 // Object.setPrototypeOf
 // Object.isPrototypeOf
+
+// .call 则是函数里 this 显示指定以为第一个参数，并执行函数。
 
 hasOwn({__proto__: { a: 1 }}, 'a') // false
 hasOwn({ a: undefined }, 'a') // true
@@ -504,8 +519,6 @@ const def = (obj, key, value) => {
 };
 ```
 
-
-
 ### 3.30 toNumber 转数字
 
 ```js
@@ -513,6 +526,20 @@ const toNumber = (val) => {
     const n = parseFloat(val);
     return isNaN(n) ? val : n;
 };
+
+toNumber('111'); // 111
+toNumber('a111'); // 'a111'
+parseFloat('a111'); // NaN
+isNaN(NaN); // true
+```
+
+>其实 `isNaN` 本意是判断是不是 `NaN` 值，但是不准确的。
+比如：`isNaN('a')` 为 `true`。
+所以 `ES6` 有了 `Number.isNaN` 这个判断方法，为了弥补这一个`API`。
+
+```js
+Number.isNaN('a')  // false
+Number.isNaN(NaN); // true
 ```
 
 ### 3.31 getGlobalThis 全局对象
@@ -554,14 +581,22 @@ const getGlobalThis = () => {
 
 [《JavaScript 权威指南》第7版](https://book.douban.com/subject/35396470/)
 
-[阮一峰老师：ES6 入门教程](http://es6.ruanyifeng.com/)
+[阮一峰老师：《ES6 入门教程》](http://es6.ruanyifeng.com/)
+
+[《现代 JavaScript 教程》](https://zh.javascript.info/)
 
 [《你不知道的JavaScript》上中卷](https://book.douban.com/subject/26351021/)
 
-[JavaScript 设计模式与开发实践](https://book.douban.com/subject/26382780/)
+[《JavaScript 设计模式与开发实践》](https://book.douban.com/subject/26382780/)
 
 我也是从小白看不懂书经历过来的。到现在写文章分享。
 
-我看书的方法：多本书同时看，看相同类似的章节，看完这本可能没懂，看下一本，几本书看下来基本就懂了，一遍没看懂，再看几遍，可以避免遗忘，巩固相关章节。当然，刚开始看书很难受，看不进。这时可以看些视频和动手练习一些简单的项目。比如 https://chinese.freecodecamp.org 网站。看书是系统学习非常好的方法。后来我就是看源码较多。
+我看书的方法：多本书同时看，看相同类似的章节，比如函数。看完这本可能没懂，看下一本，几本书看下来基本就懂了，一遍没看懂，再看几遍，可以避免遗忘，巩固相关章节。当然，刚开始看书很难受，看不进。
+
+这时可以看些视频和动手练习一些简单的项目。
+
+比如：可以自己注册一个`github`账号，分章节小节，抄写书中的代码，提交到`github`，练习了才会更有感觉。
+
+再比如 [freeCodeCamp 中文在线学习网站](https://chinese.freecodecamp.org) 网站。看书是系统学习非常好的方法。后来我就是看源码较多，写文章分享出来给大家。
 
 ## 5. 总结
