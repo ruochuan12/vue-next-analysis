@@ -3,7 +3,7 @@ theme: smartblue
 highlight: dracula
 ---
 
-# Vue3 源码中那些实用的工具函数
+# Vue3 源码中那些实用的基础工具函数
 
 ## 1. 前言
 
@@ -212,6 +212,7 @@ isModelListener('1onUpdate:change'); // false
 [ES6入门教程：字符串的新增方法](https://es6.ruanyifeng.com/#docs/string-methods)
 
 很多方法都在《ES6入门教程》中有讲到，就不赘述了。
+
 ### 3.8 extend 继承 合并
 
 说合并可能更准确些。
@@ -245,9 +246,9 @@ console.log(arr); // [1, 2]
 
 `splice` 其实是一个很耗性能的方法。删除数组中的一项，其他元素都要移动位置。
 
-**引申**：[`axios InterceptorManager` 拦截器源码](
-[axios InterceptorManager](https://github.com/axios/axios/blob/master/lib/core/InterceptorManager.js)
-)中，拦截器用数组存储的。但实际移除拦截器时，只是把拦截器置为`null`。而不是用`splice`移除。最后执行时为null的不执行，同样效果。这`axios`拦截器这个场景下，不得不说为性能做到了很好的考虑。
+**引申**：[`axios InterceptorManager` 拦截器源码](https://github.com/axios/axios/blob/master/lib/core/InterceptorManager.js) 中，拦截器用数组存储的。但实际移除拦截器时，只是把拦截器置为 `null` 。而不是用`splice`移除。最后执行时为 `null` 的不执行，同样效果。`axios` 拦截器这个场景下，不得不说为性能做到了很好的考虑。
+
+看如下 `axios` 拦截器代码示例：
 
 ```js
 // 代码有删减
@@ -288,6 +289,8 @@ hasOwn({}, 'hasOwnProperty') // false
 hasOwn({}, 'toString') // false
 // 是自己的本身拥有的属性，不是通过原型链向上查找的。
 ```
+
+对象API可以看我之前写的一篇文章[JavaScript 对象所有API解析](https://mp.weixin.qq.com/s/Y3nL3GPcxiqb3zK6pEuycg)，写的还算全面。
 
 ### 3.11 isArray 判断数组
 
@@ -506,6 +509,10 @@ const arr = [
 ]
 invokeArrayFns(arr, '若川');
 ```
+
+为什么这样写，我们一般都是一个函数执行就行。
+
+数组中存放函数，函数其实也算是数据。然后执行函数。
 
 ### 3.29 def 定义
 
