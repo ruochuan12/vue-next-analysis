@@ -180,7 +180,8 @@ export function ssrProcessComponent(
     } else if (component === TRANSITION_GROUP) {
       return ssrProcessTransitionGroup(node, context)
     } else {
-      // real fall-through (e.g. KeepAlive): just render its children.
+      // real fall-through: Transition / KeepAlive
+      // just render its children.
       processChildren(node.children, context)
     }
   } else {
@@ -240,6 +241,7 @@ function createVNodeSlotBranch(
 ): ReturnStatement {
   // apply a sub-transform using vnode-based transforms.
   const rawOptions = rawOptionsMap.get(parentContext.root)!
+
   const subOptions = {
     ...rawOptions,
     // overwrite with vnode-based transforms
