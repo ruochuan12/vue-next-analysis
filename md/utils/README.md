@@ -462,7 +462,7 @@ JS判断类型也有  typeof ，但不是很准确。而且能够识别出的不
 const isPlainObject = (val) => toTypeString(val) === '[object Object]';
 
 // 前文中 有 isObject 判断是不是对象了。
-// isPlainObject 这个函数在很多源码里都有，比如 jQuery 源码
+// isPlainObject 这个函数在很多源码里都有，比如 jQuery 源码和 lodash 源码等
 // TODO:
 ```
 
@@ -549,6 +549,13 @@ const toHandlerKey = cacheStringFunction((str) => (str ? `on${capitalize(str)}` 
 ```js
 // compare whether a value has changed, accounting for NaN.
 const hasChanged = (value, oldValue) => value !== oldValue && (value === value || oldValue === oldValue);
+// 例子：
+// 认为 NaN 是不变的
+hasChanged(NaN, NaN); // false
+hasChanged(1, 1); // false
+hasChanged(1, 2); // false
+// 场景
+// watch 监测值是不是变化了
 ```
 
 ### 3.28 invokeArrayFns  执行数组里的函数
@@ -579,7 +586,7 @@ invokeArrayFns(arr, '若川');
 
 数组中存放函数，函数其实也算是数据。然后执行函数。
 
-### 3.29 def 定义
+### 3.29 def 定义对象属性
 
 ```js
 const def = (obj, key, value) => {
@@ -590,6 +597,21 @@ const def = (obj, key, value) => {
     });
 };
 ```
+
+`Object.defineProperty` 算是一个非常重要的`API`。
+涉及到比较重要的知识点。
+在`ES3`中，除了一些内置属性（如：`Math.PI`），对象的所有的属性在任何时候都可以被修改、插入、删除。在`ES5`中，我们可以设置属性是否可以被改变或是被删除——在这之前，它是内置属性的特权。`ES5`中引入了**属性描述符**的概念，我们可以通过它对所定义的属性有更大的控制权。这些**属性描述符**（特性）包括：
+
+>`value`——当试图获取属性时所返回的值。<br>
+>`writable`——该属性是否可写。<br>
+>`enumerable`——该属性在`for in`循环中是否会被枚举。<br>
+>`configurable`——该属性是否可被删除。<br>
+>`set()`——该属性的更新操作所调用的函数。<br>
+>`get()`——获取属性值时所调用的函数。<br>
+
+另外，**数据描述符**（其中属性为：`enumerable`，`configurable`，`value`，`writable`）与**存取描述符**（其中属性为`enumerable`，`configurable`，`set()`，`get()`）之间是有互斥关系的。在定义了`set()`和`get()`之后，描述符会认为存取操作已被 定义了，其中再定义`value`和`writable`会**引起错误**。
+
+其他本文就不过多赘述了。更多对象 `API` 可以查看这篇文章[JavaScript 对象所有API解析](https://mp.weixin.qq.com/s/Y3nL3GPcxiqb3zK6pEuycg) 第三小节开头。
 
 ### 3.30 toNumber 转数字
 
