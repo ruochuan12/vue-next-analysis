@@ -3,7 +3,7 @@ theme: smartblue
 highlight: dracula
 ---
 
-# Vue3 源码中那些实用的基础工具函数
+# 初学者也能看懂的 Vue3 源码中那些实用的基础工具函数
 
 ## 1. 前言
 
@@ -196,6 +196,10 @@ isOn('on3change'); // true
 
 [regex101](https://regex101.com)
 
+另外正则看老姚的迷你书就够用了。
+
+[老姚：《JavaScript 正则表达式迷你书》问世了！](https://juejin.cn/post/6844903501034684430)
+
 ### 3.7 isModelListener 监听器
 
 判断字符串是不是以`onUpdate:`开头
@@ -314,7 +318,7 @@ const map = new Map();
 const o = { p: 'Hello World' };
 
 map.set(o, 'content');
-map.get(o); // "content"
+map.get(o); // 'content'
 isMap(map); // true
 ```
 
@@ -375,6 +379,11 @@ const isSymbol = (val) => typeof val === 'symbol';
 
 ```js
 const isObject = (val) => val !== null && typeof val === 'object';
+
+// 例子：
+isObject(null); // false
+isObject({name: '若川'}); // true
+// 判断不为 null 的原因是 typeof null 其实 是 object
 ```
 
 ### 3.19 isPromise 判断是不是 Promise
@@ -383,18 +392,34 @@ const isObject = (val) => val !== null && typeof val === 'object';
 const isPromise = (val) => {
     return isObject(val) && isFunction(val.then) && isFunction(val.catch);
 };
+
+// 判断是不是Promise对象
+const p1 = new Promise(function(resolve, reject){
+  resolve('若川');
+});
+isPromise(p1); // true
+// promise 对于初学者来说可能比较难理解。但是重点内容，JS异步编程，要着重掌握。
+// 现在 web 开发 Promise 和 async await  等非常常用。
 ```
+
+可以根据文末推荐的书籍看`Promise`相关章节掌握。同时也推荐这本迷你书[JavaScript Promise迷你书（中文版）](http://liubin.org/promises-book/)
 
 ### 3.20 objectToString 对象转字符串
 
 ```js
 const objectToString = Object.prototype.toString;
+
+// 对象转字符串
 ```
 
 ### 3.21 toTypeString  对象转字符串
 
 ```js
 const toTypeString = (value) => objectToString.call(value);
+
+// call 是一个函数，第一个参数是 执行函数里面 this 指向。
+// 通过这个能获得 类似  "[object String]" 其中 String 是根据类型变化的
+
 ```
 
 ### 3.22 toRawType  对象转字符串 截取后几位
@@ -404,21 +429,61 @@ const toRawType = (value) => {
     // extract "RawType" from strings like "[object RawType]"
     return toTypeString(value).slice(8, -1);
 };
+
+// 截取到
+toRawType('');  'String'
+```
+
+可以 截取到 String Array 等这些类型
+
+是JS判断数据类型非常重要的知识点。
+
+JS判断类型也有  typeof ，但不是很准确。而且能够识别出的不多。
+
+这些算是基础知识
+
+[mdn typeof 文档](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Operators/typeof)，文档比较详细，也实现了一个很完善的`type`函数。
+
+```js
+// typeof 返回值目前有以下8种 
+'undefined'
+'object'
+'boolean'
+'number'
+'bigint'
+'string'
+'symobl'
+'function'
 ```
 
 ### 3.23 isPlainObject 判断是不是纯粹的对象
 
 ```js
 const isPlainObject = (val) => toTypeString(val) === '[object Object]';
+
+// 前文中 有 isObject 判断是不是对象了。
+// isPlainObject 这个函数在很多源码里都有，比如 jQuery 源码
+// TODO:
 ```
 
-### 3.24 isIntegerKey 判断是不是
+### 3.24 isIntegerKey 判断是不是数字型的字符串key值
 
 ```js
 const isIntegerKey = (key) => isString(key) &&
     key !== 'NaN' &&
     key[0] !== '-' &&
     '' + parseInt(key, 10) === key;
+
+// 例子:
+isInegerKey('a'); // false
+isInegerKey('0'); // true
+isInegerKey('011'); // false
+isInegerKey('11'); // true
+// 其中 parseInt 第二个参数是进制。
+// 字符串能用数组取值的形式取值。
+//  还有一个 charAt 函数，但不常用 
+'abc'.charAt(0) // 'a'
+// charAt 与数组形式不同的是 取不到值会返回空字符串''，数组形式取值取不到则是 undefined
 ```
 
 ### 3.25 makeMap && isReservedProp
