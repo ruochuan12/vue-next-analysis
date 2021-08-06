@@ -9,7 +9,7 @@ highlight: dracula
 
 57个工具函数
 
-写相对很难的源码，耗费了自己的时间和精力，也没收获多少阅读点赞，其实是一件挺受打击的事情。
+写相对很难的源码，耗费了自己的时间和精力，也没收获多少阅读点赞，其实是一件挺受打击的事情。从阅读量和读者受益方面来看，不能促进作者持续输出文章。
 
 所以转变思路，写一些相对通俗易懂的文章。**其实源码也不是想象的那么难，至少有很多看得懂。比如工具函数**。本文通过学习`Vue3`源码中的工具函数模块的源码，学习源码为自己所用。歌德曾说：读一本好书，就是在和高尚的人谈话。
 同理可得：读源码，也算是和作者的一种学习交流的方式。
@@ -351,16 +351,17 @@ isDate(new Date()); // true
 isDate({__proto__ : new Date()); // true
 // 实际上是应该是 Object 才对。
 // 所以用 instanceof 判断数组也不准确。
+// 再比如
 ({__proto__: [] }) instanceof Array; // true
 // 实际上是对象。
+// 所以用 数组本身提供的方法 Array.isArray 是比较准确的。
 ```
-
-判断数组
 
 ### 3.15 isFunction 判断是不是函数
 
 ```js
 const isFunction = (val) => typeof val === 'function';
+// 判断数组有多种方法，但这个是比较常用也相对兼容性好的。
 ```
 
 ### 3.16 isString 判断是不是字符串
@@ -373,7 +374,16 @@ const isString = (val) => typeof val === 'string';
 
 ```js
 const isSymbol = (val) => typeof val === 'symbol';
+
+// 例子：
+let s = Symbol();
+
+typeof s
+// "symbol"
+// Symbol 是函数，不需要用 new 调用。
 ```
+
+>`ES6` 引入了一种新的原始数据类型`Symbol`，表示独一无二的值。
 
 ### 3.18 isObject 判断是不是对象
 
@@ -398,6 +408,7 @@ const p1 = new Promise(function(resolve, reject){
   resolve('若川');
 });
 isPromise(p1); // true
+
 // promise 对于初学者来说可能比较难理解。但是重点内容，JS异步编程，要着重掌握。
 // 现在 web 开发 Promise 和 async await  等非常常用。
 ```
@@ -419,7 +430,6 @@ const toTypeString = (value) => objectToString.call(value);
 
 // call 是一个函数，第一个参数是 执行函数里面 this 指向。
 // 通过这个能获得 类似  "[object String]" 其中 String 是根据类型变化的
-
 ```
 
 ### 3.22 toRawType  对象转字符串 截取后几位
@@ -434,15 +444,15 @@ const toRawType = (value) => {
 toRawType('');  'String'
 ```
 
-可以 截取到 String Array 等这些类型
+可以 截取到 `String` `Array` 等这些类型
 
-是JS判断数据类型非常重要的知识点。
+是 `JS` 判断数据类型非常重要的知识点。
 
-JS判断类型也有  typeof ，但不是很准确。而且能够识别出的不多。
+`JS` 判断类型也有  typeof ，但不是很准确，而且能够识别出的不多。
 
 这些算是基础知识
 
-[mdn typeof 文档](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Operators/typeof)，文档比较详细，也实现了一个很完善的`type`函数。
+[mdn typeof 文档](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Operators/typeof)，文档比较详细，也实现了一个很完善的`type`函数，本文就不赘述了。
 
 ```js
 // typeof 返回值目前有以下8种 
@@ -463,6 +473,7 @@ const isPlainObject = (val) => toTypeString(val) === '[object Object]';
 
 // 前文中 有 isObject 判断是不是对象了。
 // isPlainObject 这个函数在很多源码里都有，比如 jQuery 源码和 lodash 源码等
+
 // TODO:
 ```
 
@@ -488,6 +499,8 @@ isInegerKey('11'); // true
 
 ### 3.25 makeMap && isReservedProp
 
+TODO:
+
 ```js
 /**
  * Make a map and return a function for checking if a key
@@ -510,6 +523,8 @@ const isReservedProp = /*#__PURE__*/ makeMap(
     'onVnodeBeforeMount,onVnodeMounted,' +
     'onVnodeBeforeUpdate,onVnodeUpdated,' +
     'onVnodeBeforeUnmount,onVnodeUnmounted');
+
+// 保留的属性
 ```
 
 ### 3.26 cacheStringFunction 缓存
@@ -569,22 +584,24 @@ const invokeArrayFns = (fns, arg) => {
 
 // 例子：
 const arr = [
-    function(){
-        console.log('我的博客地址是：https://lxchuan12.gitee.io');
+    function(val){
+        console.log(val + '的博客地址是：https://lxchuan12.gitee.io');
     },
     function(val){
-        console.log('百度搜索 ' + val + ' 可以找到我');
+        console.log('百度搜索 若川 可以找到' + val);
     },
     function(val){
-        console.log('微信搜索 ' + val + '视野 可以找到关注我');
+        console.log('微信搜索 若川视野 可以找到关注' + val);
     },
 ]
-invokeArrayFns(arr, '若川');
+invokeArrayFns(arr, '我');
 ```
 
 为什么这样写，我们一般都是一个函数执行就行。
 
 数组中存放函数，函数其实也算是数据。然后执行函数。
+
+TODO:
 
 ### 3.29 def 定义对象属性
 
@@ -674,6 +691,8 @@ const getGlobalThis = () => {
 [《JavaScript高级程序设计》第4版](https://book.douban.com/subject/35175321/)
 
 [《JavaScript 权威指南》第7版](https://book.douban.com/subject/35396470/)
+
+[《JavaScript面向对象编程2》](https://book.douban.com/subject/26302623/) 面向对象讲的很详细。
 
 [阮一峰老师：《ES6 入门教程》](http://es6.ruanyifeng.com/)
 
