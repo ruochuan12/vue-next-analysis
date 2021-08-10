@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>若川视野</title>
+</head>
+<body>
+    <div>
+        <a href="https://lxchuan12.gitee.io" target="_blank" rel="noopener noreferrer">
+            若川的博客</a>
+    </div>
+    <div>
+        <a href="https://lxchuan12.gitee.io" target="_blank" rel="noopener noreferrer">
+            公众号：若川视野</a>
+    </div>
+    <div>
+        <a href="https://v3.cn.vuejs.org/guide/introduction.html#%E5%A3%B0%E6%98%8E%E5%BC%8F%E6%B8%B2%E6%9F%93" target="_blank" rel="noopener noreferrer">
+        vue3 中文文档</a>
+    </div>
+    <div id="counter">
+        Counter: {{ counter }}
+    </div>
+    <script src="../../packages/vue/dist/vue.global.js"></script>
+    <script>
+        const Counter = {
+            data() {
+                return {
+                    counter: 0
+                }
+            }
+        }
+
+        Vue.createApp(Counter).mount('#counter')
+    </script>
+</body>
+</html>
