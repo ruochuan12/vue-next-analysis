@@ -5,17 +5,19 @@ import {
   shallowReadonly,
   proxyRefs,
   EffectScope,
-  markRaw
+  markRaw,
+  track,
+  TrackOpTypes
 } from '@vue/reactivity'
 import {
   ComponentPublicInstance,
   PublicInstanceProxyHandlers,
-  RuntimeCompiledPublicInstanceProxyHandlers,
-  createRenderContext,
+  createDevRenderContext,
   exposePropsOnRenderContext,
   exposeSetupStateOnRenderContext,
   ComponentPublicInstanceConstructor,
-  publicPropertiesMap
+  publicPropertiesMap,
+  RuntimeCompiledPublicInstanceProxyHandlers
 } from './componentPublicInstance'
 import {
   ComponentPropsOptions,
@@ -288,6 +290,10 @@ export interface ComponentInternalInstance {
    * is custom element?
    */
   isCE?: boolean
+  /**
+   * custom element specific HMR method
+   */
+  ceReload?: (newStyles?: string[]) => void
 
   // the rest are only for stateful components ---------------------------------
 
@@ -450,7 +456,7 @@ export function createComponentInstance(
     next: null,
     subTree: null!, // will be set synchronously right after creation
     update: null!, // will be set synchronously right after creation
-    scope: new EffectScope(),
+    scope: new EffectScope(true /* detached */),
     render: null,
     proxy: null,
     exposed: null,
@@ -515,7 +521,7 @@ export function createComponentInstance(
     sp: null
   }
   if (__DEV__) {
-    instance.ctx = createRenderContext(instance)
+    instance.ctx = createDevRenderContext(instance)
   } else {
     instance.ctx = { _: instance }
   }
@@ -711,9 +717,7 @@ type CompileFunction = (
 ) => InternalRenderFunction
 
 let compile: CompileFunction | undefined
-
-// dev only
-export const isRuntimeOnly = () => !compile
+let installWithProxy: (i: ComponentInternalInstance) => void
 
 /**
  * For runtime-dom to register the compiler.
@@ -721,7 +725,15 @@ export const isRuntimeOnly = () => !compile
  */
 export function registerRuntimeCompiler(_compile: any) {
   compile = _compile
+  installWithProxy = i => {
+    if (i.render!._rc) {
+      i.withProxy = new Proxy(i.ctx, RuntimeCompiledPublicInstanceProxyHandlers)
+    }
+  }
 }
+
+// dev only
+export const isRuntimeOnly = () => !compile
 
 export function finishComponentSetup(
   instance: ComponentInternalInstance,
@@ -761,10 +773,8 @@ export function finishComponentSetup(
           startMeasure(instance, `compile`)
         }
         const { isCustomElement, compilerOptions } = instance.appContext.config
-        const {
-          delimiters,
-          compilerOptions: componentCompilerOptions
-        } = Component
+        const { delimiters, compilerOptions: componentCompilerOptions } =
+          Component
         const finalCompilerOptions: CompilerOptions = extend(
           extend(
             {
@@ -794,11 +804,8 @@ export function finishComponentSetup(
     // for runtime-compiled render functions using `with` blocks, the render
     // proxy used needs a different `has` handler which is more performant and
     // also only allows a whitelist of globals to fallthrough.
-    if (instance.render._rc) {
-      instance.withProxy = new Proxy(
-        instance.ctx,
-        RuntimeCompiledPublicInstanceProxyHandlers
-      )
+    if (installWithProxy) {
+      installWithProxy(instance)
     }
   }
 
@@ -822,10 +829,10 @@ export function finishComponentSetup(
           (__ESM_BUNDLER__
             ? ` Configure your bundler to alias "vue" to "vue/dist/vue.esm-bundler.js".`
             : __ESM_BROWSER__
-              ? ` Use "vue.esm-browser.js" instead.`
-              : __GLOBAL__
-                ? ` Use "vue.global.js" instead.`
-                : ``) /* should not happen */
+            ? ` Use "vue.esm-browser.js" instead.`
+            : __GLOBAL__
+            ? ` Use "vue.global.js" instead.`
+            : ``) /* should not happen */
       )
     } else {
       warn(`Component is missing template or render function.`)
@@ -833,19 +840,32 @@ export function finishComponentSetup(
   }
 }
 
-const attrDevProxyHandlers: ProxyHandler<Data> = {
-  get: (target, key: string) => {
-    markAttrsAccessed()
-    return target[key]
-  },
-  set: () => {
-    warn(`setupContext.attrs is readonly.`)
-    return false
-  },
-  deleteProperty: () => {
-    warn(`setupContext.attrs is readonly.`)
-    return false
-  }
+function createAttrsProxy(instance: ComponentInternalInstance): Data {
+  return new Proxy(
+    instance.attrs,
+    __DEV__
+      ? {
+          get(target, key: string) {
+            markAttrsAccessed()
+            track(instance, TrackOpTypes.GET, '$attrs')
+            return target[key]
+          },
+          set() {
+            warn(`setupContext.attrs is readonly.`)
+            return false
+          },
+          deleteProperty() {
+            warn(`setupContext.attrs is readonly.`)
+            return false
+          }
+        }
+      : {
+          get(target, key: string) {
+            track(instance, TrackOpTypes.GET, '$attrs')
+            return target[key]
+          }
+        }
+  )
 }
 
 export function createSetupContext(
@@ -858,15 +878,13 @@ export function createSetupContext(
     instance.exposed = exposed || {}
   }
 
+  let attrs: Data
   if (__DEV__) {
-    let attrs: Data
     // We use getters in dev in case libs like test-utils overwrite instance
     // properties (overwrites should not be done in prod)
     return Object.freeze({
       get attrs() {
-        return (
-          attrs || (attrs = new Proxy(instance.attrs, attrDevProxyHandlers))
-        )
+        return attrs || (attrs = createAttrsProxy(instance))
       },
       get slots() {
         return shallowReadonly(instance.slots)
@@ -878,7 +896,9 @@ export function createSetupContext(
     })
   } else {
     return {
-      attrs: instance.attrs,
+      get attrs() {
+        return attrs || (attrs = createAttrsProxy(instance))
+      },
       slots: instance.slots,
       emit: instance.emit,
       expose

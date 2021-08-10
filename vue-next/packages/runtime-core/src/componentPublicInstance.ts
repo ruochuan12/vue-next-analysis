@@ -72,7 +72,9 @@ import { installCompatInstanceProperties } from './compat/instance'
 export interface ComponentCustomProperties {}
 
 type IsDefaultMixinComponent<T> = T extends ComponentOptionsMixin
-  ? ComponentOptionsMixin extends T ? true : false
+  ? ComponentOptionsMixin extends T
+    ? true
+    : false
   : false
 
 type MixinToOptionTypes<T> = T extends ComponentOptionsBase<
@@ -222,7 +224,7 @@ const getPublicInstance = (
   return getPublicInstance(i.parent)
 }
 
-export const publicPropertiesMap: PublicPropertiesMap = extend(
+export const publicPropertiesMap: PublicPropertiesMap = /*#__PURE__*/ extend(
   Object.create(null),
   {
     $: i => i,
@@ -261,15 +263,8 @@ export interface ComponentRenderContext {
 
 export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
   get({ _: instance }: ComponentRenderContext, key: string) {
-    const {
-      ctx,
-      setupState,
-      data,
-      props,
-      accessCache,
-      type,
-      appContext
-    } = instance
+    const { ctx, setupState, data, props, accessCache, type, appContext } =
+      instance
 
     // for internal formatters to know that this is a Vue instance
     if (__DEV__ && key === '__isVue') {
@@ -464,7 +459,7 @@ if (__DEV__ && !__TEST__) {
   }
 }
 
-export const RuntimeCompiledPublicInstanceProxyHandlers = extend(
+export const RuntimeCompiledPublicInstanceProxyHandlers = /*#__PURE__*/ extend(
   {},
   PublicInstanceProxyHandlers,
   {
@@ -489,10 +484,11 @@ export const RuntimeCompiledPublicInstanceProxyHandlers = extend(
   }
 )
 
+// dev only
 // In dev mode, the proxy target exposes the same properties as seen on `this`
 // for easier console inspection. In prod mode it will be an empty object so
 // these properties definitions can be skipped.
-export function createRenderContext(instance: ComponentInternalInstance) {
+export function createDevRenderContext(instance: ComponentInternalInstance) {
   const target: Record<string, any> = {}
 
   // expose internal instance for proxy handlers

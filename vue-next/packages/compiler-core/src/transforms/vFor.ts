@@ -86,8 +86,8 @@ export const transformFor = createStructuralDirectiveTransform(
       const fragmentFlag = isStableFragment
         ? PatchFlags.STABLE_FRAGMENT
         : keyProp
-          ? PatchFlags.KEYED_FRAGMENT
-          : PatchFlags.UNKEYED_FRAGMENT
+        ? PatchFlags.KEYED_FRAGMENT
+        : PatchFlags.UNKEYED_FRAGMENT
 
       forNode.codegenNode = createVNodeCall(
         context,
@@ -135,8 +135,8 @@ export const transformFor = createStructuralDirectiveTransform(
           : isTemplate &&
             node.children.length === 1 &&
             isSlotOutlet(node.children[0])
-            ? (node.children[0] as SlotOutletNode) // api-extractor somehow fails to infer this
-            : null
+          ? (node.children[0] as SlotOutletNode) // api-extractor somehow fails to infer this
+          : null
 
         if (slotOutlet) {
           // <slot v-for="..."> or <template v-for="..."><slot/></template>
@@ -209,7 +209,7 @@ export const transformFor = createStructuralDirectiveTransform(
               ...(keyExp ? [` && _cached.key === `, keyExp] : []),
               ` && ${context.helperString(
                 IS_MEMO_SAME
-              )}(_cached.memo, _memo)) return _cached`
+              )}(_cached, _memo)) return _cached`
             ]),
             createCompoundExpression([`const _item = `, childBlock as any]),
             createSimpleExpression(`_item.memo = _memo`),
@@ -221,11 +221,13 @@ export const transformFor = createStructuralDirectiveTransform(
             createSimpleExpression(String(context.cached++))
           )
         } else {
-          renderExp.arguments.push(createFunctionExpression(
-            createForLoopParams(forNode.parseResult),
-            childBlock,
-            true /* force newline */
-          ) as ForIteratorExpression)
+          renderExp.arguments.push(
+            createFunctionExpression(
+              createForLoopParams(forNode.parseResult),
+              childBlock,
+              true /* force newline */
+            ) as ForIteratorExpression
+          )
         }
       }
     })
@@ -343,9 +345,7 @@ export function parseForExpression(
     validateBrowserExpression(result.source as SimpleExpressionNode, context)
   }
 
-  let valueContent = LHS.trim()
-    .replace(stripParensRE, '')
-    .trim()
+  let valueContent = LHS.trim().replace(stripParensRE, '').trim()
   const trimmedOffset = LHS.indexOf(valueContent)
 
   const iteratorMatch = valueContent.match(forIteratorRE)

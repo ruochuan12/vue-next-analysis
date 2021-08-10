@@ -209,6 +209,32 @@ defineExpose({ foo: 123 })
         content.lastIndexOf(`import { x }`)
       )
     })
+
+    test('imports not used in <template> should not be exposed', () => {
+      const { content } = compile(`
+        <script setup lang="ts">
+        import { FooBar, FooBaz, FooQux, vMyDir, x, y, z, x$y, Last } from './x'
+        const fooBar: FooBar = 1
+        </script>
+        <template>
+          <FooBaz v-my-dir>{{ x }} {{ yy }} {{ x$y }}</FooBaz>
+          <foo-qux/>
+          <div :id="z + 'y'">FooBar</div>
+          <Last/>
+        </template>
+        `)
+      assertCode(content)
+      // FooBar: should not be matched by plain text
+      // FooBaz: used as PascalCase component
+      // FooQux: used as kebab-case component
+      // vMyDir: used as directive v-my-dir
+      // x: used in interpolation
+      // y: should not be matched by {{ yy }} or 'y' in binding exps
+      // x$y: #4274 should escape special chars when creating Regex
+      expect(content).toMatch(
+        `return { fooBar, FooBaz, FooQux, vMyDir, x, z, x$y, Last }`
+      )
+    })
   })
 
   describe('inlineTemplate mode', () => {
@@ -514,6 +540,7 @@ const emit = defineEmits(['a', 'b'])
         literalUnion: 'foo' | 'bar'
         literalUnionMixed: 'foo' | 1 | boolean
         intersection: Test & {}
+        foo: ((item: any) => boolean) | null
       }>()
       </script>`)
       assertCode(content)
@@ -545,6 +572,7 @@ const emit = defineEmits(['a', 'b'])
         `literalUnionMixed: { type: [String, Number, Boolean], required: true }`
       )
       expect(content).toMatch(`intersection: { type: Object, required: true }`)
+      expect(content).toMatch(`foo: { type: [Function, null], required: true }`)
       expect(bindings).toStrictEqual({
         string: BindingTypes.PROPS,
         number: BindingTypes.PROPS,
@@ -567,7 +595,8 @@ const emit = defineEmits(['a', 'b'])
         union: BindingTypes.PROPS,
         literalUnion: BindingTypes.PROPS,
         literalUnionMixed: BindingTypes.PROPS,
-        intersection: BindingTypes.PROPS
+        intersection: BindingTypes.PROPS,
+        foo: BindingTypes.PROPS
       })
     })
 
@@ -784,6 +813,18 @@ const emit = defineEmits(['a', 'b'])
       const { content, bindings } = compile(
         `<script setup lang="ts">
         enum Foo { A = 123 }
+        </script>`
+      )
+      assertCode(content)
+      expect(bindings).toStrictEqual({
+        Foo: BindingTypes.SETUP_CONST
+      })
+    })
+
+    test('const Enum', () => {
+      const { content, bindings } = compile(
+        `<script setup lang="ts">
+        const enum Foo { A = 123 }
         </script>`
       )
       assertCode(content)

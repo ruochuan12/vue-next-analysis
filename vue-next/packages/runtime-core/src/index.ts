@@ -34,7 +34,12 @@ export {
   getCurrentScope,
   onScopeDispose
 } from '@vue/reactivity'
-export { watch, watchEffect, watchPostEffect } from './apiWatch'
+export {
+  watch,
+  watchEffect,
+  watchPostEffect,
+  watchSyncEffect
+} from './apiWatch'
 export {
   onBeforeMount,
   onMounted,
@@ -308,7 +313,9 @@ const _ssrUtils = {
  * SSR utils for \@vue/server-renderer. Only exposed in cjs builds.
  * @internal
  */
-export const ssrUtils = (__NODE_JS__ ? _ssrUtils : null) as typeof _ssrUtils
+export const ssrUtils = (
+  __NODE_JS__ || __ESM_BUNDLER__ ? _ssrUtils : null
+) as typeof _ssrUtils
 
 // 2.x COMPAT ------------------------------------------------------------------
 
@@ -341,10 +348,10 @@ const _compatUtils = {
 /**
  * @internal only exposed in compat builds.
  */
-export const compatUtils = (__COMPAT__
-  ? _compatUtils
-  : null) as typeof _compatUtils
+export const compatUtils = (
+  __COMPAT__ ? _compatUtils : null
+) as typeof _compatUtils
 
-// Ref macros ------------------------------------------------------------------
+// Ref sugar macros ------------------------------------------------------------
 // for dts generation only
-export { $ref, $computed, $raw, $fromRefs } from './helpers/refMacros'
+export { $ref, $computed, $raw, $fromRefs } from './helpers/refSugar'

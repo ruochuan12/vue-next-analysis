@@ -204,6 +204,22 @@ return { x }
 }"
 `;
 
+exports[`SFC compile <script setup> imports imports not used in <template> should not be exposed 1`] = `
+"import { defineComponent as _defineComponent } from 'vue'
+import { FooBar, FooBaz, FooQux, vMyDir, x, y, z, x$y, Last } from './x'
+        
+export default _defineComponent({
+  setup(__props, { expose }) {
+  expose()
+
+        const fooBar: FooBar = 1
+        
+return { fooBar, FooBaz, FooQux, vMyDir, x, z, x$y, Last }
+}
+
+})"
+`;
+
 exports[`SFC compile <script setup> imports should allow defineProps/Emit at the start of imports 1`] = `
 "import { ref } from 'vue'
       
@@ -540,6 +556,21 @@ return { a, b, c, d, x }
 }"
 `;
 
+exports[`SFC compile <script setup> with TypeScript const Enum 1`] = `
+"import { defineComponent as _defineComponent } from 'vue'
+const enum Foo { A = 123 }
+        
+export default _defineComponent({
+  setup(__props, { expose }) {
+  expose()
+
+        
+return { Foo }
+}
+
+})"
+`;
+
 exports[`SFC compile <script setup> with TypeScript defineEmits w/ type (exported interface) 1`] = `
 "import { defineComponent as _defineComponent } from 'vue'
 export interface Emits { (e: 'foo' | 'bar'): void }
@@ -761,7 +792,8 @@ export default _defineComponent({
     union: { type: [String, Number], required: true },
     literalUnion: { type: [String, String], required: true },
     literalUnionMixed: { type: [String, Number, Boolean], required: true },
-    intersection: { type: Object, required: true }
+    intersection: { type: Object, required: true },
+    foo: { type: [Function, null], required: true }
   } as unknown as undefined,
   setup(__props: {
         string: string
@@ -787,6 +819,7 @@ export default _defineComponent({
         literalUnion: 'foo' | 'bar'
         literalUnionMixed: 'foo' | 1 | boolean
         intersection: Test & {}
+        foo: ((item: any) => boolean) | null
       }, { expose }) {
   expose()
 

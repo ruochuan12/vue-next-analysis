@@ -1,5 +1,4 @@
 import {
-  Component,
   ComponentOptionsMixin,
   ComponentOptionsWithArrayProps,
   ComponentOptionsWithObjectProps,
@@ -18,13 +17,15 @@ import {
   createVNode,
   defineComponent,
   nextTick,
-  warn
+  warn,
+  ConcreteComponent,
+  ComponentOptions
 } from '@vue/runtime-core'
 import { camelize, extend, hyphenate, isArray, toNumber } from '@vue/shared'
 import { hydrate, render } from '.'
 
-type VueElementConstructor<P = {}> = {
-  new (): VueElement & P
+export type VueElementConstructor<P = {}> = {
+  new (initialProps?: Record<string, any>): VueElement & P
 }
 
 // defineCustomElement provides the same type inference as defineComponent
@@ -60,7 +61,7 @@ export function defineCustomElement<
     Extends,
     E,
     EE
-  >
+  > & { styles?: string[] }
 ): VueElementConstructor<Props>
 
 // overload 3: object format with array props declaration
@@ -85,7 +86,7 @@ export function defineCustomElement<
     Extends,
     E,
     EE
-  >
+  > & { styles?: string[] }
 ): VueElementConstructor<{ [K in PropNames]: any }>
 
 // overload 4: object format with object props declaration
@@ -110,7 +111,7 @@ export function defineCustomElement<
     Extends,
     E,
     EE
-  >
+  > & { styles?: string[] }
 ): VueElementConstructor<ExtractPropTypes<PropsOptions>>
 
 // overload 5: defining a custom element from the returned value of
@@ -124,29 +125,11 @@ export function defineCustomElement(
   hydate?: RootHydrateFunction
 ): VueElementConstructor {
   const Comp = defineComponent(options as any)
-  const { props } = options
-  const rawKeys = props ? (isArray(props) ? props : Object.keys(props)) : []
-  const attrKeys = rawKeys.map(hyphenate)
-  const propKeys = rawKeys.map(camelize)
-
   class VueCustomElement extends VueElement {
-    static get observedAttributes() {
-      return attrKeys
+    static def = Comp
+    constructor(initialProps?: Record<string, any>) {
+      super(Comp, initialProps, hydate)
     }
-    constructor() {
-      super(Comp, attrKeys, propKeys, hydate)
-    }
-  }
-
-  for (const key of propKeys) {
-    Object.defineProperty(VueCustomElement.prototype, key, {
-      get() {
-        return this._getProp(key)
-      },
-      set(val) {
-        this._setProp(key, val)
-      }
-    })
   }
 
   return VueCustomElement
@@ -157,28 +140,25 @@ export const defineSSRCustomElement = ((options: any) => {
   return defineCustomElement(options, hydrate)
 }) as typeof defineCustomElement
 
-const BaseClass = (typeof HTMLElement !== 'undefined'
-  ? HTMLElement
-  : class {}) as typeof HTMLElement
+const BaseClass = (
+  typeof HTMLElement !== 'undefined' ? HTMLElement : class {}
+) as typeof HTMLElement
+
+type InnerComponentDef = ConcreteComponent & { styles?: string[] }
 
 export class VueElement extends BaseClass {
   /**
    * @internal
    */
-  _props: Record<string, any> = {}
-  /**
-   * @internal
-   */
   _instance: ComponentInternalInstance | null = null
-  /**
-   * @internal
-   */
-  _connected = false
+
+  private _connected = false
+  private _resolved = false
+  private _styles?: HTMLStyleElement[]
 
   constructor(
-    private _def: Component,
-    private _attrKeys: string[],
-    private _propKeys: string[],
+    private _def: InnerComponentDef,
+    private _props: Record<string, any> = {},
     hydrate?: RootHydrateFunction
   ) {
     super()
@@ -193,25 +173,24 @@ export class VueElement extends BaseClass {
       }
       this.attachShadow({ mode: 'open' })
     }
-  }
 
-  attributeChangedCallback(name: string, _oldValue: string, newValue: string) {
-    if (this._attrKeys.includes(name)) {
-      this._setProp(camelize(name), toNumber(newValue), false)
+    // set initial attrs
+    for (let i = 0; i < this.attributes.length; i++) {
+      this._setAttr(this.attributes[i].name)
     }
+    // watch future attr changes
+    const observer = new MutationObserver(mutations => {
+      for (const m of mutations) {
+        this._setAttr(m.attributeName!)
+      }
+    })
+    observer.observe(this, { attributes: true })
   }
 
   connectedCallback() {
     this._connected = true
     if (!this._instance) {
-      // check if there are props set pre-upgrade
-      for (const key of this._propKeys) {
-        if (this.hasOwnProperty(key)) {
-          const value = (this as any)[key]
-          delete (this as any)[key]
-          this._setProp(key, value)
-        }
-      }
+      this._resolveDef()
       render(this._createVNode(), this.shadowRoot!)
     }
   }
@@ -224,6 +203,50 @@ export class VueElement extends BaseClass {
         this._instance = null
       }
     })
+  }
+
+  /**
+   * resolve inner component definition (handle possible async component)
+   */
+  private _resolveDef() {
+    if (this._resolved) {
+      return
+    }
+
+    const resolve = (def: InnerComponentDef) => {
+      this._resolved = true
+      // check if there are props set pre-upgrade or connect
+      for (const key of Object.keys(this)) {
+        if (key[0] !== '_') {
+          this._setProp(key, this[key as keyof this])
+        }
+      }
+      const { props, styles } = def
+      // defining getter/setters on prototype
+      const rawKeys = props ? (isArray(props) ? props : Object.keys(props)) : []
+      for (const key of rawKeys.map(camelize)) {
+        Object.defineProperty(this, key, {
+          get() {
+            return this._getProp(key)
+          },
+          set(val) {
+            this._setProp(key, val)
+          }
+        })
+      }
+      this._applyStyles(styles)
+    }
+
+    const asyncDef = (this._def as ComponentOptions).__asyncLoader
+    if (asyncDef) {
+      asyncDef().then(resolve)
+    } else {
+      resolve(this._def)
+    }
+  }
+
+  protected _setAttr(key: string) {
+    this._setProp(camelize(key), toNumber(this.getAttribute(key)), false)
   }
 
   /**
@@ -261,6 +284,24 @@ export class VueElement extends BaseClass {
       vnode.ce = instance => {
         this._instance = instance
         instance.isCE = true
+        // HMR
+        if (__DEV__) {
+          instance.ceReload = newStyles => {
+            // alawys reset styles
+            if (this._styles) {
+              this._styles.forEach(s => this.shadowRoot!.removeChild(s))
+              this._styles.length = 0
+            }
+            this._applyStyles(newStyles)
+            // if this is an async component, ceReload is called from the inner
+            // component so no need to reload the async wrapper
+            if (!(this._def as ComponentOptions).__asyncLoader) {
+              // reload
+              this._instance = null
+              render(this._createVNode(), this.shadowRoot!)
+            }
+          }
+        }
 
         // intercept emit
         instance.emit = (event: string, ...args: any[]) => {
@@ -285,5 +326,19 @@ export class VueElement extends BaseClass {
       }
     }
     return vnode
+  }
+
+  private _applyStyles(styles: string[] | undefined) {
+    if (styles) {
+      styles.forEach(css => {
+        const s = document.createElement('style')
+        s.textContent = css
+        this.shadowRoot!.appendChild(s)
+        // record for HMR
+        if (__DEV__) {
+          ;(this._styles || (this._styles = [])).push(s)
+        }
+      })
+    }
   }
 }

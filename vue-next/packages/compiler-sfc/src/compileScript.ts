@@ -2,9 +2,14 @@ import MagicString from 'magic-string'
 import {
   BindingMetadata,
   BindingTypes,
+  createRoot,
   locStub,
-  UNREF
-} from '@vue/compiler-core'
+  NodeTypes,
+  transform,
+  parserOptions,
+  UNREF,
+  SimpleExpressionNode
+} from '@vue/compiler-dom'
 import {
   ScriptSetupTextRanges,
   SFCDescriptor,
@@ -12,7 +17,13 @@ import {
   TextRange
 } from './parse'
 import { parse as _parse, ParserOptions, ParserPlugin } from '@babel/parser'
-import { babelParserDefaultPlugins, generateCodeFrame } from '@vue/shared'
+import {
+  babelParserDefaultPlugins,
+  camelize,
+  capitalize,
+  generateCodeFrame,
+  makeMap
+} from '@vue/shared'
 import {
   Node,
   Declaration,
@@ -45,6 +56,7 @@ import {
 import { compileTemplate, SFCTemplateCompileOptions } from './compileTemplate'
 import { warnExperimental, warnOnce } from './warn'
 import { rewriteDefault } from './rewriteDefault'
+import { createCache } from './cache'
 
 // Special compiler macros
 const DEFINE_PROPS = 'defineProps'
@@ -56,6 +68,10 @@ const $REF = `$ref`
 const $COMPUTED = `$computed`
 const $FROM_REFS = `$fromRefs`
 const $RAW = `$raw`
+
+const isBuiltInDir = makeMap(
+  `once,memo,if,else,else-if,slot,text,html,on,bind,model,show,cloak,is`
+)
 
 export interface SFCScriptCompileOptions {
   /**
@@ -72,8 +88,8 @@ export interface SFCScriptCompileOptions {
    */
   babelParserPlugins?: ParserPlugin[]
   /**
-   * Enable ref: label sugar
-   * https://github.com/vuejs/rfcs/pull/228
+   * Introduce a compiler-based syntax sugar for using refs without `.value`
+   * https://github.com/vuejs/rfcs/discussions/369
    * @default true
    */
   refSugar?: boolean
@@ -105,6 +121,7 @@ interface ImportBinding {
   source: string
   rangeNode: Node
   isFromSetup: boolean
+  isUsedInTemplate: boolean
 }
 
 interface VariableBinding {
@@ -312,12 +329,23 @@ export function compileScript(
     if (source === 'vue' && imported) {
       userImportAlias[imported] = local
     }
+
+    let isUsedInTemplate = true
+    if (isTS && sfc.template && !sfc.template.src) {
+      isUsedInTemplate = new RegExp(
+        // #4274 escape $ since it's a special char in regex
+        // (and is the only regex special char that is valid in identifiers)
+        `[^\\w$_]${local.replace(/\$/g, '\\$')}[^\\w$_]`
+      ).test(resolveTemplateUsageCheckString(sfc))
+    }
+
     userImports[local] = {
       isType,
       imported: imported || 'default',
       source,
       rangeNode,
-      isFromSetup
+      isFromSetup,
+      isUsedInTemplate
     }
   }
 
@@ -522,7 +550,10 @@ export function compileScript(
         decl.init
       )
     } else {
-      warnExperimental(`ref sugar`, 0 /* TODO */)
+      warnExperimental(
+        `ref sugar`,
+        `https://github.com/vuejs/rfcs/discussions/369`
+      )
     }
 
     const callee = (decl.init.callee as Identifier).name
@@ -617,7 +648,7 @@ export function compileScript(
         // append binding declarations after the parent statement
         s.appendLeft(
           statement.end! + startOffset,
-          `\nconst ${nameId.name} = ${helper('ref')}(__${nameId.name});`
+          `\nconst ${nameId.name} = ${helper('shallowRef')}(__${nameId.name});`
         )
       }
     }
@@ -651,7 +682,7 @@ export function compileScript(
         // append binding declarations after the parent statement
         s.appendLeft(
           statement.end! + startOffset,
-          `\nconst ${nameId.name} = ${helper('ref')}(__${nameId.name});`
+          `\nconst ${nameId.name} = ${helper('shallowRef')}(__${nameId.name});`
         )
       }
     }
@@ -678,7 +709,9 @@ export function compileScript(
       .map(key => {
         let defaultString: string | undefined
         if (hasStaticDefaults) {
-          const prop = (propsRuntimeDefaults as ObjectExpression).properties.find(
+          const prop = (
+            propsRuntimeDefaults as ObjectExpression
+          ).properties.find(
             (node: any) => node.key.name === key
           ) as ObjectProperty
           if (prop) {
@@ -776,9 +809,7 @@ export function compileScript(
             // rewrite to `import { x as __default__ } from './x'` and
             // add to top
             s.prepend(
-              `import { ${
-                defaultSpecifier.local.name
-              } as ${defaultTempVar} } from '${node.source.value}'\n`
+              `import { ${defaultSpecifier.local.name} as ${defaultTempVar} } from '${node.source.value}'\n`
             )
           } else {
             // export { x as default }
@@ -1008,7 +1039,7 @@ export function compileScript(
 
     if (isTS) {
       // runtime enum
-      if (node.type === 'TSEnumDeclaration' && !node.const) {
+      if (node.type === 'TSEnumDeclaration') {
         registerBinding(setupBindings, node.id, BindingTypes.SETUP_CONST)
       }
 
@@ -1279,7 +1310,7 @@ export function compileScript(
     // return bindings from setup
     const allBindings: Record<string, any> = { ...setupBindings }
     for (const key in userImports) {
-      if (!userImports[key].isType) {
+      if (!userImports[key].isType && userImports[key].isUsedInTemplate) {
         allBindings[key] = true
       }
     }
@@ -1376,11 +1407,11 @@ export function compileScript(
     ...scriptSetup,
     bindings: bindingMetadata,
     content: s.toString(),
-    map: (s.generateMap({
+    map: s.generateMap({
       source: filename,
       hires: true,
       includeContent: true
-    }) as unknown) as RawSourceMap,
+    }) as unknown as RawSourceMap,
     scriptAst,
     scriptSetupAst
   }
@@ -1470,8 +1501,8 @@ function walkObjectPattern(
           const type = isDefineCall
             ? BindingTypes.SETUP_CONST
             : isConst
-              ? BindingTypes.SETUP_MAYBE_REF
-              : BindingTypes.SETUP_LET
+            ? BindingTypes.SETUP_MAYBE_REF
+            : BindingTypes.SETUP_LET
           registerBinding(bindings, p.key, type)
         } else {
           walkPattern(p.value, bindings, isConst, isDefineCall)
@@ -1507,8 +1538,8 @@ function walkPattern(
     const type = isDefineCall
       ? BindingTypes.SETUP_CONST
       : isConst
-        ? BindingTypes.SETUP_MAYBE_REF
-        : BindingTypes.SETUP_LET
+      ? BindingTypes.SETUP_MAYBE_REF
+      : BindingTypes.SETUP_LET
     registerBinding(bindings, node, type)
   } else if (node.type === 'RestElement') {
     // argument can only be identifer when destructuring
@@ -1523,8 +1554,8 @@ function walkPattern(
       const type = isDefineCall
         ? BindingTypes.SETUP_CONST
         : isConst
-          ? BindingTypes.SETUP_MAYBE_REF
-          : BindingTypes.SETUP_LET
+        ? BindingTypes.SETUP_MAYBE_REF
+        : BindingTypes.SETUP_LET
       registerBinding(bindings, node.left, type)
     } else {
       walkPattern(node.left, bindings, isConst)
@@ -1646,15 +1677,16 @@ function inferRuntimeType(
       }
       return [`null`]
 
+    case 'TSParenthesizedType':
+      return inferRuntimeType(node.typeAnnotation, declaredTypes)
     case 'TSUnionType':
       return [
         ...new Set(
-          [].concat(node.types.map(t =>
-            inferRuntimeType(t, declaredTypes)
-          ) as any)
+          [].concat(
+            node.types.map(t => inferRuntimeType(t, declaredTypes)) as any
+          )
         )
       ]
-
     case 'TSIntersectionType':
       return ['Object']
 
@@ -1667,8 +1699,8 @@ function toRuntimeTypeString(types: string[]) {
   return types.some(t => t === 'null')
     ? `null`
     : types.length > 1
-      ? `[${types.join(', ')}]`
-      : types[0]
+    ? `[${types.join(', ')}]`
+    : types[0]
 }
 
 function extractRuntimeEmits(
@@ -1751,7 +1783,13 @@ export function walkIdentifiers(
   ;(walk as any)(root, {
     enter(node: Node & { scopeIds?: Set<string> }, parent: Node | undefined) {
       parent && parentStack.push(parent)
-      if (node.type.startsWith('TS')) {
+      if (
+        parent &&
+        parent.type.startsWith('TS') &&
+        parent.type !== 'TSAsExpression' &&
+        parent.type !== 'TSNonNullExpression' &&
+        parent.type !== 'TSTypeAssertion'
+      ) {
         return this.skip()
       }
       if (onNode && onNode(node, parent!, parentStack) === false) {
@@ -2138,4 +2176,55 @@ function toTextRange(node: Node): TextRange {
     start: node.start!,
     end: node.end!
   }
+}
+
+const templateUsageCheckCache = createCache<string>()
+
+function resolveTemplateUsageCheckString(sfc: SFCDescriptor) {
+  const { content, ast } = sfc.template!
+  const cached = templateUsageCheckCache.get(content)
+  if (cached) {
+    return cached
+  }
+
+  let code = ''
+  transform(createRoot([ast]), {
+    nodeTransforms: [
+      node => {
+        if (node.type === NodeTypes.ELEMENT) {
+          if (
+            !parserOptions.isNativeTag!(node.tag) &&
+            !parserOptions.isBuiltInComponent!(node.tag)
+          ) {
+            code += `,${capitalize(camelize(node.tag))}`
+          }
+          for (let i = 0; i < node.props.length; i++) {
+            const prop = node.props[i]
+            if (prop.type === NodeTypes.DIRECTIVE) {
+              if (!isBuiltInDir(prop.name)) {
+                code += `,v${capitalize(camelize(prop.name))}`
+              }
+              if (prop.exp) {
+                code += `,${stripStrings(
+                  (prop.exp as SimpleExpressionNode).content
+                )}`
+              }
+            }
+          }
+        } else if (node.type === NodeTypes.INTERPOLATION) {
+          code += `,${stripStrings(
+            (node.content as SimpleExpressionNode).content
+          )}`
+        }
+      }
+    ]
+  })
+
+  code += ';'
+  templateUsageCheckCache.set(content, code)
+  return code
+}
+
+function stripStrings(exp: string) {
+  return exp.replace(/'[^']+'|"[^"]+"|`[^`]+`/g, '')
 }
