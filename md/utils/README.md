@@ -282,7 +282,7 @@ const extend = Object.assign;
 
 // 例子：
 const data = { name: '若川' };
-const data2 = entend(data, { mp: '若川视野', name: '是若川啊' });
+const data2 = extend(data, { mp: '若川视野', name: '是若川啊' });
 console.log(data); // { name: "是若川啊", mp: "若川视野" }
 console.log(data2); // { name: "是若川啊", mp: "若川视野" }
 console.log(data === data2); // true
@@ -535,6 +535,13 @@ const isPlainObject = (val) => toTypeString(val) === '[object Object]';
 
 // 前文中 有 isObject 判断是不是对象了。
 // isPlainObject 这个函数在很多源码里都有，比如 jQuery 源码和 lodash 源码等，具体实现不一样
+// 上文的 isObject([]) 也是 true ，因为 type [] 为 'object'
+// 而 isPlainObject([]) 则是false
+const Ctor = function(){
+    this.name = '我是构造函数';
+}
+isPlainObject({}); // true
+isPlainObject(new Ctor()); // true
 ```
 
 ### 3.24 isIntegerKey 判断是不是数字型的字符串key值
@@ -668,10 +675,53 @@ const hasChanged = (value, oldValue) => value !== oldValue && (value === value |
 // 认为 NaN 是不变的
 hasChanged(NaN, NaN); // false
 hasChanged(1, 1); // false
-hasChanged(1, 2); // false
+hasChanged(1, 2); // true
+hasChanged(+0, -0); // false
+// Obect.is 认为 +0 和 -0 不是同一个值
+Object.is(+0, -0); // false           
+// Object.is 认为  NaN 和 本身 相比 是同一个值
+Object.is(NaN, NaN); // true
 // 场景
 // watch 监测值是不是变化了
+
+// (value === value || oldValue === oldValue)
+// 为什么会有这句 因为要判断 NaN 。认为 NaN 是不变的。因为 NaN === NaN 为 false
 ```
+
+根据 `hasChanged` 这个我们继续来看看：`Object.is` `API`。
+
+`Object.is(value1, value2) (ES6)`
+
+该方法用来比较两个值是否严格相等。它与严格比较运算符（===）的行为基本一致。 不同之处只有两个：一是`+0`不等于`-0`，而是 `NaN` 等于自身。
+
+```js
+Object.is('若川', '若川'); // true
+Object.is({},{}); // false
+Object.is(+0, -0); // false
++0 === -0; // true
+Object.is(NaN, NaN); // true
+NaN === NaN; // false
+```
+
+`ES5`可以通过以下代码部署`Object.is`。
+
+```js
+Object.defineProperty(Object, 'is', {
+    value: function() {x, y} {
+        if (x === y) {
+           // 针对+0不等于-0的情况
+           return x !== 0 || 1 / x === 1 / y;
+        }
+        // 针对 NaN的情况
+        return x !== x && y !== y;
+    },
+    configurable: true,
+    enumerable: false,
+    writable: true
+});
+```
+
+根据举例可以说明
 
 ### 3.28 invokeArrayFns  执行数组里的函数
 
