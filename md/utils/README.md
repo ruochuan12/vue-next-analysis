@@ -553,10 +553,10 @@ const isIntegerKey = (key) => isString(key) &&
     '' + parseInt(key, 10) === key;
 
 // 例子:
-isInegerKey('a'); // false
-isInegerKey('0'); // true
-isInegerKey('011'); // false
-isInegerKey('11'); // true
+isIntegerKey('a'); // false
+isIntegerKey('0'); // true
+isIntegerKey('011'); // false
+isIntegerKey('11'); // true
 // 其中 parseInt 第二个参数是进制。
 // 字符串能用数组取值的形式取值。
 //  还有一个 charAt 函数，但不常用 
@@ -635,7 +635,7 @@ const camelizeRE = /-(\w)/g;
 /**
  * @private
  */
-// 首字母转大写
+// 连字符 - 转驼峰  on-click => onClick
 const camelize = cacheStringFunction((str) => {
     return str.replace(camelizeRE, (_, c) => (c ? c.toUpperCase() : ''));
 });
