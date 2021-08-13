@@ -65,6 +65,7 @@ const DEFINE_EXPOSE = 'defineExpose'
 const WITH_DEFAULTS = 'withDefaults'
 
 const $REF = `$ref`
+const $SHALLOW_REF = '$shallowRef'
 const $COMPUTED = `$computed`
 const $FROM_REFS = `$fromRefs`
 const $RAW = `$raw`
@@ -531,7 +532,12 @@ export function compileScript(
   }
 
   function isRefSugarCall(callee: string) {
-    return callee === $REF || callee === $COMPUTED || callee === $FROM_REFS
+    return (
+      callee === $REF ||
+      callee === $COMPUTED ||
+      callee === $FROM_REFS ||
+      callee === $SHALLOW_REF
+    )
   }
 
   function processRefSugar(
@@ -558,24 +564,28 @@ export function compileScript(
 
     const callee = (decl.init.callee as Identifier).name
     const start = decl.init.start! + startOffset
-    if (callee === $REF) {
+    if (callee === $REF || callee === $SHALLOW_REF) {
       if (statement.kind !== 'let') {
-        error(`${$REF}() bindings can only be declared with let.`, decl)
+        error(`${callee}() bindings can only be declared with let.`, decl)
       }
       if (decl.id.type !== 'Identifier') {
         error(
-          `${$REF}() bindings cannot be used with destructuring. ` +
+          `${callee}() bindings cannot be used with destructuring. ` +
             `If you are trying to destructure from an object of refs, ` +
             `use \`let { x } = $fromRefs(obj)\`.`,
           decl.id
         )
       }
       registerRefBinding(decl.id)
-      s.overwrite(start, start + $REF.length, helper('ref'))
+      s.overwrite(
+        start,
+        start + callee.length,
+        helper(callee === $REF ? 'ref' : 'shallowRef')
+      )
     } else if (callee === $COMPUTED) {
       if (decl.id.type !== 'Identifier') {
         error(
-          `${$COMPUTED}() bindings cannot be used with destructuring.`,
+          `${callee}() bindings cannot be used with destructuring.`,
           decl.id
         )
       }
@@ -584,7 +594,7 @@ export function compileScript(
     } else if (callee === $FROM_REFS) {
       if (!decl.id.type.endsWith('Pattern')) {
         error(
-          `${$FROM_REFS}() declaration must be used with destructure patterns.`,
+          `${callee}() declaration must be used with destructure patterns.`,
           decl
         )
       }
@@ -1096,7 +1106,7 @@ export function compileScript(
 
   // 3. Do a full walk to rewrite identifiers referencing let exports with ref
   // value access
-  if (enableRefSugar && Object.keys(refBindings).length) {
+  if (enableRefSugar) {
     const onIdent = (id: Identifier, parent: Node, parentStack: Node[]) => {
       if (refBindings[id.name] && !refIdentifiers.has(id)) {
         if (isStaticProperty(parent) && parent.shorthand) {
@@ -1115,13 +1125,23 @@ export function compileScript(
       }
     }
 
-    const onNode = (node: Node) => {
+    const onNode = (node: Node, parent: Node) => {
       if (isCallOf(node, $RAW)) {
         s.remove(
           node.callee.start! + startOffset,
           node.callee.end! + startOffset
         )
         return false // skip walk
+      } else if (
+        parent &&
+        isCallOf(node, isRefSugarCall) &&
+        (parent.type !== 'VariableDeclarator' || node !== parent.init)
+      ) {
+        error(
+          // @ts-ignore
+          `${node.callee.name} can only be used directly as a variable initializer.`,
+          node
+        )
       }
     }
 

@@ -6,24 +6,26 @@ describe('<script setup> ref sugar', () => {
     return compile(src, { refSugar: true })
   }
 
-  test('$ref declarations', () => {
+  test('$ref & $shallowRef declarations', () => {
     const { content, bindings } = compileWithRefSugar(`<script setup>
     let foo = $ref()
     let a = $ref(1)
-    let b = $ref({
+    let b = $shallowRef({
       count: 0
     })
     let c = () => {}
     let d
     </script>`)
-    expect(content).toMatch(`import { ref as _ref } from 'vue'`)
+    expect(content).toMatch(
+      `import { ref as _ref, shallowRef as _shallowRef } from 'vue'`
+    )
     expect(content).not.toMatch(`$ref()`)
     expect(content).not.toMatch(`$ref(1)`)
-    expect(content).not.toMatch(`$ref({`)
+    expect(content).not.toMatch(`$shallowRef({`)
     expect(content).toMatch(`let foo = _ref()`)
     expect(content).toMatch(`let a = _ref(1)`)
     expect(content).toMatch(`
-    let b = _ref({
+    let b = _shallowRef({
       count: 0
     })
     `)
@@ -365,6 +367,27 @@ describe('<script setup> ref sugar', () => {
           { refSugar: true }
         )
       ).toThrow(`cannot reference locally declared variables`)
+    })
+
+    test('warn usage in non-init positions', () => {
+      expect(() =>
+        compile(
+          `<script setup>
+      let bar = $ref(1)
+      bar = $ref(2)
+    </script>`,
+          { refSugar: true }
+        )
+      ).toThrow(`$ref can only be used directly as a variable initializer`)
+
+      expect(() =>
+        compile(
+          `<script setup>
+      let bar = { foo: $computed(1) }
+    </script>`,
+          { refSugar: true }
+        )
+      ).toThrow(`$computed can only be used directly as a variable initializer`)
     })
   })
 })
