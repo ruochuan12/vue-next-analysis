@@ -66,11 +66,10 @@ cd vue-next-analysis
 
 npm install --global yarn
 yarn # install the dependencies of the project
-# yarn —ignore-scripts 忽略一些安装，更快速
 yarn build
 ```
 
-可以得到 `vue-next/packages/shared/dist/shared.esm-bundler.js`，文件也就是纯`js`文件。也接下就是解释其中的一些方法。
+可以得到 `vue-next/packages/shared/dist/shared.esm-bundler.js`，文件也就是纯`js`文件。接下来就是解释其中的一些方法。
 
 >当然，前面可能比较啰嗦。我可以直接讲 `3. 工具函数`。但通过我上文的介绍，即使是初学者，都能看懂一些开源项目源码，也许就会有一定的成就感。
 >另外，面试问到被类似的问题或者笔试题时，你说看`Vue3`源码学到的，面试官绝对对你刮目相看。
