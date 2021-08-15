@@ -12,12 +12,7 @@
 ```
 
 
-发布
-
-### 1.1 
-### 1.2 
-
-## 2 环境准备
+### 1.1 环境准备
 
 你需要确保 [Node.js](http://nodejs.org/) 版本是 `10+`, 而且 `yarn` 的版本是 `1.x` [Yarn 1.x](https://yarnpkg.com/en/docs/install)。
 
@@ -33,11 +28,10 @@ cd vue-next
 
 # 或者克隆我的项目
 git clone https://github.com/lxchuan12/vue-next-analysis.git
-cd vue-next-analysis
+cd vue-next-analysis/vue-next
 
 npm install --global yarn
 yarn # install the dependencies of the project
-# yarn —ignore-scripts 忽略一些安装，更快速
 yarn release
 ```
 
@@ -58,21 +52,115 @@ script
 }
 ```
 
+主要是对 `main` 函数讲解。
 
-### 2.1 流程梳理
+`scripts/release.js`文件，整个文件代码行数200余行，非常值得我们学习。
+
+## 2 前置
+
+前置函数等分享
 
 ```js
+// vue-next/scripts/release.js
+const args = require('minimist')(process.argv.slice(2))
+// 文件模块
+const fs = require('fs')
+// 路径
+const path = require('path')
+// 控制台
+const chalk = require('chalk')
+const semver = require('semver')
+const currentVersion = require('../package.json').version
+const { prompt } = require('enquirer')
+
+// 执行子进程命令   简单说 就是在终端命令行执行 命令
+const execa = require('execa')
+```
+
+重点
+
+[minimist](https://github.com/substack/minimist)
+
+```bash
+$ node example/parse.js -a beep -b boop
+{ _: [], a: 'beep', b: 'boop' }
+
+$ node example/parse.js -x 3 -y 4 -n5 -abc --beep=boop foo bar baz
+{ _: [ 'foo', 'bar', 'baz' ],
+  x: 3,
+  y: 4,
+  n: 5,
+  a: true,
+  b: true,
+  c: true,
+  beep: 'boop' }
+```
+
+[chalk](https://github.com/chalk/chalk)
+
+```js
+```
+
+[execa](https://github.com/sindresorhus/execa)
+```js
+```
+
+```js
+const preId =
+  args.preid ||
+  (semver.prerelease(currentVersion) && semver.prerelease(currentVersion)[0])
+const isDryRun = args.dry
+const skipTests = args.skipTests
+const skipBuild = args.skipBuild
+
+// 读取 packages 文件夹，过滤掉 不是 .ts文件 结尾 并且不是 . 开头的文件夹
+const packages = fs
+  .readdirSync(path.resolve(__dirname, '../packages'))
+  .filter(p => !p.endsWith('.ts') && !p.startsWith('.'))
+```
+
+```js
+const skippedPackages = []
+
+const versionIncrements = [
+  'patch',
+  'minor',
+  'major',
+  ...(preId ? ['prepatch', 'preminor', 'premajor', 'prerelease'] : [])
+]
+```
+
+```js
+const inc = i => semver.inc(currentVersion, i, preId)
+const bin = name => path.resolve(__dirname, '../node_modules/.bin/' + name)
+const run = (bin, args, opts = {}) =>
+  execa(bin, args, { stdio: 'inherit', ...opts })
+const dryRun = (bin, args, opts = {}) =>
+  console.log(chalk.blue(`[dryrun] ${bin} ${args.join(' ')}`), opts)
+const runIfNotDry = isDryRun ? dryRun : run
+const getPkgRoot = pkg => path.resolve(__dirname, '../packages/' + pkg)
+const step = msg => console.log(chalk.cyan(msg))
+```
+
+## 3 主流程
+
+### 2.1 流程梳理 main 函数
+
+```js
+const chalk = require('chalk')
+const step = msg => console.log(chalk.cyan(msg))
 // 前面一堆依赖引入和函数定义等
 async function main(){
-    // run tests before release
-    step('\nRunning tests...')
-    // update all package versions and inter-dependencies
+  // 版本校验
+
+  // run tests before release
+  step('\nRunning tests...')
+  // update all package versions and inter-dependencies
   step('\nUpdating cross dependencies...')
   // build all packages with types
   step('\nBuilding all packages...')
 
   // generate changelog
-
   step('\nCommitting changes...')
 
   // publish packages
@@ -81,9 +169,153 @@ async function main(){
   // push to GitHub
   step('\nPushing to GitHub...')
 }
+
 main().catch(err => {
   console.error(err)
 })
 ```
 
-### 2.2
+
+
+### 2.2 确认要发布的版本
+
+第一段代码虽然比较长，但是还好理解。
+主要就是确认要发布的版本。
+
+```js
+let targetVersion = args._[0]
+
+if (!targetVersion) {
+  // no explicit version, offer suggestions
+  const { release } = await prompt({
+    type: 'select',
+    name: 'release',
+    message: 'Select release type',
+    choices: versionIncrements.map(i => `${i} (${inc(i)})`).concat(['custom'])
+  })
+
+  if (release === 'custom') {
+    targetVersion = (
+      await prompt({
+        type: 'input',
+        name: 'version',
+        message: 'Input custom version',
+        initial: currentVersion
+      })
+    ).version
+  } else {
+    targetVersion = release.match(/\((.*)\)/)[1]
+  }
+}
+
+if (!semver.valid(targetVersion)) {
+  throw new Error(`invalid target version: ${targetVersion}`)
+}
+
+const { yes } = await prompt({
+  type: 'confirm',
+  name: 'yes',
+  message: `Releasing v${targetVersion}. Confirm?`
+})
+
+if (!yes) {
+  return
+}
+```
+
+args
+
+### 2.3 执行测试用例
+
+```js
+// run tests before release
+step('\nRunning tests...')
+if (!skipTests && !isDryRun) {
+  await run(bin('jest'), ['--clearCache'])
+  await run('yarn', ['test', '--bail'])
+} else {
+  console.log(`(skipped)`)
+}
+```
+
+### 2.4 更新依赖版本
+
+```js
+// update all package versions and inter-dependencies
+step('\nUpdating cross dependencies...')
+updateVersions(targetVersion)
+```
+
+### 2.5 打包编译所有包
+
+```js
+// build all packages with types
+step('\nBuilding all packages...')
+if (!skipBuild && !isDryRun) {
+  await run('yarn', ['build', '--release'])
+  // test generated dts files
+  step('\nVerifying type declarations...')
+  await run('yarn', ['test-dts-only'])
+} else {
+  console.log(`(skipped)`)
+}
+```
+
+### 2.6 生成 changelog
+
+```js
+// generate changelog
+await run(`yarn`, ['changelog'])
+```
+
+### 2.7 提交代码
+
+```js
+const { stdout } = await run('git', ['diff'], { stdio: 'pipe' })
+if (stdout) {
+  step('\nCommitting changes...')
+  await runIfNotDry('git', ['add', '-A'])
+  await runIfNotDry('git', ['commit', '-m', `release: v${targetVersion}`])
+} else {
+  console.log('No changes to commit.')
+}
+```
+
+### 2.8 更新
+
+```js
+// publish packages
+step('\nPublishing packages...')
+for (const pkg of packages) {
+  await publishPackage(pkg, targetVersion, runIfNotDry)
+}
+```
+
+### 2.9 推送到 github
+
+```js
+// push to GitHub
+step('\nPushing to GitHub...')
+await runIfNotDry('git', ['tag', `v${targetVersion}`])
+await runIfNotDry('git', ['push', 'origin', `refs/tags/v${targetVersion}`])
+await runIfNotDry('git', ['push'])
+```
+
+```js
+if (isDryRun) {
+  console.log(`\nDry run finished - run git diff to see package changes.`)
+}
+
+if (skippedPackages.length) {
+  console.log(
+    chalk.yellow(
+      `The following packages are skipped and NOT published:\n- ${skippedPackages.join(
+        '\n- '
+      )}`
+    )
+  )
+}
+console.log()
+```
+
+## 总结
