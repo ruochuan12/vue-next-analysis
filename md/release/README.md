@@ -11,7 +11,6 @@
 2. 动手优化公司项目发布流程
 ```
 
-
 ### 1.1 环境准备
 
 你需要确保 [Node.js](http://nodejs.org/) 版本是 `10+`, 而且 `yarn` 的版本是 `1.x` [Yarn 1.x](https://yarnpkg.com/en/docs/install)。
@@ -60,6 +59,8 @@ script
 
 前置函数等分享
 
+### 2.1 第一部分
+
 ```js
 // vue-next/scripts/release.js
 const args = require('minimist')(process.argv.slice(2))
@@ -77,7 +78,7 @@ const { prompt } = require('enquirer')
 const execa = require('execa')
 ```
 
-重点
+#### 2.1.1 minimist
 
 [minimist](https://github.com/substack/minimist)
 
@@ -96,16 +97,40 @@ $ node example/parse.js -x 3 -y 4 -n5 -abc --beep=boop foo bar baz
   beep: 'boop' }
 ```
 
+#### 2.1.2 chalk
+
 [chalk](https://github.com/chalk/chalk)
 
 ```js
 ```
 
+#### 2.1.3 semver
+
+[semver](https://github.com/npm/node-semver)
+
+#### 2.1.4 enquirer
+
+[enquirer](https://github.com/enquirer/enquirer)
+#### 2.1.5 execa
+
 [execa](https://github.com/sindresorhus/execa)
-```js
-```
 
 ```js
+// 例子
+const execa = require('execa');
+
+(async () => {
+	const {stdout} = await execa('echo', ['unicorns']);
+	console.log(stdout);
+	//=> 'unicorns'
+})();
+```
+
+
+### 2.2 第二部分
+
+```js
+// vue-next/scripts/release.js
 const preId =
   args.preid ||
   (semver.prerelease(currentVersion) && semver.prerelease(currentVersion)[0])
@@ -119,32 +144,58 @@ const packages = fs
   .filter(p => !p.endsWith('.ts') && !p.startsWith('.'))
 ```
 
+### 2.3 第三部分
+
 ```js
+// vue-next/scripts/release.js
+
+// 跳过的包
 const skippedPackages = []
 
+// 版本递增
 const versionIncrements = [
   'patch',
   'minor',
   'major',
   ...(preId ? ['prepatch', 'preminor', 'premajor', 'prerelease'] : [])
 ]
+
+const inc = i => semver.inc(currentVersion, i, preId)
 ```
 
+### 2.4 第四部分
+
 ```js
-const inc = i => semver.inc(currentVersion, i, preId)
+// vue-next/scripts/release.js
+
+// 获取 bin 命令
 const bin = name => path.resolve(__dirname, '../node_modules/.bin/' + name)
 const run = (bin, args, opts = {}) =>
   execa(bin, args, { stdio: 'inherit', ...opts })
 const dryRun = (bin, args, opts = {}) =>
   console.log(chalk.blue(`[dryrun] ${bin} ${args.join(' ')}`), opts)
 const runIfNotDry = isDryRun ? dryRun : run
+
+// 获取包的路径
 const getPkgRoot = pkg => path.resolve(__dirname, '../packages/' + pkg)
+
+// 控制台输出
 const step = msg => console.log(chalk.cyan(msg))
 ```
 
-## 3 主流程
+#### 2.4.1 bin 函数
 
-### 2.1 流程梳理 main 函数
+获取 `node_modules/.bin/` 目录下的命令，整个文件就用了一次。
+
+```js
+bin('jest')
+```
+
+#### 2.4.2 run、dryRun、runIfNotDry
+
+## 3 main 主流程
+
+### 3.1 流程梳理 main 函数
 
 ```js
 const chalk = require('chalk')
@@ -175,9 +226,7 @@ main().catch(err => {
 })
 ```
 
-
-
-### 2.2 确认要发布的版本
+### 3.2 确认要发布的版本
 
 第一段代码虽然比较长，但是还好理解。
 主要就是确认要发布的版本。
@@ -225,7 +274,7 @@ if (!yes) {
 
 args
 
-### 2.3 执行测试用例
+### 3.3 执行测试用例
 
 ```js
 // run tests before release
@@ -238,7 +287,7 @@ if (!skipTests && !isDryRun) {
 }
 ```
 
-### 2.4 更新依赖版本
+### 3.4 更新依赖版本
 
 ```js
 // update all package versions and inter-dependencies
@@ -246,7 +295,7 @@ step('\nUpdating cross dependencies...')
 updateVersions(targetVersion)
 ```
 
-### 2.5 打包编译所有包
+### 3.5 打包编译所有包
 
 ```js
 // build all packages with types
@@ -261,14 +310,14 @@ if (!skipBuild && !isDryRun) {
 }
 ```
 
-### 2.6 生成 changelog
+### 3.6 生成 changelog
 
 ```js
 // generate changelog
 await run(`yarn`, ['changelog'])
 ```
 
-### 2.7 提交代码
+### 3.7 提交代码
 
 ```js
 const { stdout } = await run('git', ['diff'], { stdio: 'pipe' })
@@ -281,7 +330,7 @@ if (stdout) {
 }
 ```
 
-### 2.8 更新
+### 3.8 更新
 
 ```js
 // publish packages
@@ -291,7 +340,7 @@ for (const pkg of packages) {
 }
 ```
 
-### 2.9 推送到 github
+### 3.9 推送到 github
 
 ```js
 // push to GitHub
