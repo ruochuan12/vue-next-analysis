@@ -332,7 +332,7 @@ export function compileScript(
     }
 
     let isUsedInTemplate = true
-    if (isTS && sfc.template && !sfc.template.src) {
+    if (isTS && sfc.template && !sfc.template.src && !sfc.template.lang) {
       isUsedInTemplate = new RegExp(
         // #4274 escape $ since it's a special char in regex
         // (and is the only regex special char that is valid in identifiers)
@@ -1703,7 +1703,7 @@ function inferRuntimeType(
       return [
         ...new Set(
           [].concat(
-            node.types.map(t => inferRuntimeType(t, declaredTypes)) as any
+            ...(node.types.map(t => inferRuntimeType(t, declaredTypes)) as any)
           )
         )
       ]
@@ -1716,11 +1716,7 @@ function inferRuntimeType(
 }
 
 function toRuntimeTypeString(types: string[]) {
-  return types.some(t => t === 'null')
-    ? `null`
-    : types.length > 1
-    ? `[${types.join(', ')}]`
-    : types[0]
+  return types.length > 1 ? `[${types.join(', ')}]` : types[0]
 }
 
 function extractRuntimeEmits(
@@ -2246,5 +2242,15 @@ function resolveTemplateUsageCheckString(sfc: SFCDescriptor) {
 }
 
 function stripStrings(exp: string) {
-  return exp.replace(/'[^']+'|"[^"]+"|`[^`]+`/g, '')
+  return exp
+    .replace(/'[^']+'|"[^"]+"/g, '')
+    .replace(/`[^`]+`/g, stripTemplateString)
+}
+
+function stripTemplateString(str: string): string {
+  const interpMatch = str.match(/\${[^}]+}/g)
+  if (interpMatch) {
+    return interpMatch.map(m => m.slice(2, -1)).join(',')
+  }
+  return ''
 }
