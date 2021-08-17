@@ -2,16 +2,24 @@
 
 ## 1. 前言
 
-最近尤雨溪发布了3.2版本。小版本已经是3.2.2。本文来学习下尤大是怎么发布`vuejs`的。
+最近尤雨溪发布了3.2版本。小版本已经是`3.2.3`。本文来学习下尤大是怎么发布`vuejs`的。
+
+涉及到的 `vue-next/scripts/release.js`文件，整个文件代码行数虽然只有 `200` 余行，但非常值得我们学习。
 
 阅读本文，你将学到：
 
 ```bash
 1. 熟悉 vuejs 发布流程
-2. 动手优化公司项目发布流程
+2. 学会调试 nodejs 代码
+3. 动手优化公司项目发布流程
 ```
 
-### 1.1 环境准备
+## 2. 环境准备
+
+打开 [vue-next](https://github.com/vuejs/vue-next)，
+开源项目一般都能在 `README.md` 或者 [.github/contributing.md](https://github.com/vuejs/vue-next/blob/master/.github/contributing.md) 找到贡献指南。
+
+而贡献指南写了很多关于参与项目开发的信息。比如怎么跑起来，项目目录结构是怎样的。怎么投入开发，需要哪些知识储备等。
 
 你需要确保 [Node.js](http://nodejs.org/) 版本是 `10+`, 而且 `yarn` 的版本是 `1.x` [Yarn 1.x](https://yarnpkg.com/en/docs/install)。
 
@@ -29,37 +37,72 @@ cd vue-next
 git clone https://github.com/lxchuan12/vue-next-analysis.git
 cd vue-next-analysis/vue-next
 
+# 安装 yarn
 npm install --global yarn
+# 安装依赖
 yarn # install the dependencies of the project
-yarn release
+# yarn release
 ```
 
+### 2.1 严格校验使用 yarn 安装依赖
 
-package.json
-script
+接着我们来看下 `vue-next/package.json` 文件。
 
 ```json
+// vue-next/package.json
 {
     "private": true,
-    "version": "3.2.0-beta.1",
+    "version": "3.2.3",
     "workspaces": [
         "packages/*"
     ],
     "scripts": {
-        "release": "node scripts/release.js",
+        // --dry 参数是我加的，不执行测试和编译 、不执行 推送git等操作
+        // 也就是说空跑，只是打印，后文再详细讲述
+        "release": "node scripts/release.js --dry",
+        "preinstall": "node ./scripts/checkYarn.js",
     }
 }
 ```
 
-主要是对 `main` 函数讲解。
+如果你尝试使用 `npm` 安装依赖，应该是会报错的。为啥会报错呢。
+因为 `package.json` 有个前置 `preinstall`  `node ./scripts/checkYarn.js` 判断强制要求是使用`yarn`安装。
 
-`scripts/release.js`文件，整个文件代码行数200余行，非常值得我们学习。
+`scripts/checkYarn.js`文件如下，也就是在`process.env`环境变量中找执行路径`npm_execpath`，如果不是`yarn`就输出警告，且进程结束。
 
-## 2 前置
+```js
+// scripts/checkYarn.js
+if (!/yarn\.js$/.test(process.env.npm_execpath || '')) {
+  console.warn(
+    '\u001b[33mThis repository requires Yarn 1.x for scripts to work properly.\u001b[39m\n'
+  )
+  process.exit(1)
+}
+```
+
+如果你想忽略这个前置的钩子判断，可以使用`yarn --ignore-scripts` 命令。也有后置的钩子`post`。[更多详细的可以查看 npm 文档](https://docs.npmjs.com/cli/v6/using-npm/scripts)
+
+### 2.2 调试  vue-next/scripts/release.js 文件
+
+接着我们来学习如何调试 `vue-next/scripts/release.js`文件。
+
+这里声明下我的 `VSCode` 版本 是 `1.59.0` 应该 `1.50.0` 起就可以按以下步骤调试了。
+
+```bash
+code -v
+# 1.59.0
+```
+
+找到 `vue-next/package.json` 文件打开，然后在 `scripts` 上方，会有`debug`（调试）按钮，点击后，选择 `release`。即可进入调试模式。这时终端会如下图所示，有 `Debugger attached.` 输出。
+另外，会类似这样的图。[ 更多 nodejs 调试相关  可以查看官方文档](https://code.visualstudio.com/docs/nodejs/nodejs-debugging)
+
+学会调试后，先大致走一遍流程，在关键地方多打上几个断点多走几遍，就能猜测到源码意图了。
+
+## 3 前置声明等
 
 前置函数等分享
 
-### 2.1 第一部分
+### 3.1 第一部分
 
 ```js
 // vue-next/scripts/release.js
@@ -78,7 +121,7 @@ const { prompt } = require('enquirer')
 const execa = require('execa')
 ```
 
-#### 2.1.1 minimist
+#### 3.1.1 minimist
 
 [minimist](https://github.com/substack/minimist)
 
@@ -97,21 +140,21 @@ $ node example/parse.js -x 3 -y 4 -n5 -abc --beep=boop foo bar baz
   beep: 'boop' }
 ```
 
-#### 2.1.2 chalk
+#### 3.1.2 chalk
 
 [chalk](https://github.com/chalk/chalk)
 
 ```js
 ```
 
-#### 2.1.3 semver
+#### 3.1.3 semver
 
 [semver](https://github.com/npm/node-semver)
 
-#### 2.1.4 enquirer
+#### 3.1.4 enquirer
 
 [enquirer](https://github.com/enquirer/enquirer)
-#### 2.1.5 execa
+#### 3.1.5 execa
 
 [execa](https://github.com/sindresorhus/execa)
 
@@ -126,8 +169,7 @@ const execa = require('execa');
 })();
 ```
 
-
-### 2.2 第二部分
+### 3.2 第二部分
 
 ```js
 // vue-next/scripts/release.js
@@ -144,7 +186,7 @@ const packages = fs
   .filter(p => !p.endsWith('.ts') && !p.startsWith('.'))
 ```
 
-### 2.3 第三部分
+### 3.3 第三部分
 
 ```js
 // vue-next/scripts/release.js
@@ -163,7 +205,7 @@ const versionIncrements = [
 const inc = i => semver.inc(currentVersion, i, preId)
 ```
 
-### 2.4 第四部分
+### 3.4 第四部分
 
 ```js
 // vue-next/scripts/release.js
@@ -183,7 +225,7 @@ const getPkgRoot = pkg => path.resolve(__dirname, '../packages/' + pkg)
 const step = msg => console.log(chalk.cyan(msg))
 ```
 
-#### 2.4.1 bin 函数
+#### 3.4.1 bin 函数
 
 获取 `node_modules/.bin/` 目录下的命令，整个文件就用了一次。
 
@@ -191,11 +233,11 @@ const step = msg => console.log(chalk.cyan(msg))
 bin('jest')
 ```
 
-#### 2.4.2 run、dryRun、runIfNotDry
+#### 3.4.2 run、dryRun、runIfNotDry
 
-## 3 main 主流程
+## 4 main 主流程
 
-### 3.1 流程梳理 main 函数
+### 4.1 流程梳理 main 函数
 
 ```js
 const chalk = require('chalk')
@@ -226,7 +268,7 @@ main().catch(err => {
 })
 ```
 
-### 3.2 确认要发布的版本
+### 4.2 确认要发布的版本
 
 第一段代码虽然比较长，但是还好理解。
 主要就是确认要发布的版本。
@@ -274,7 +316,7 @@ if (!yes) {
 
 args
 
-### 3.3 执行测试用例
+### 4.3 执行测试用例
 
 ```js
 // run tests before release
@@ -287,7 +329,7 @@ if (!skipTests && !isDryRun) {
 }
 ```
 
-### 3.4 更新依赖版本
+### 4.4 更新依赖版本
 
 ```js
 // update all package versions and inter-dependencies
@@ -295,7 +337,7 @@ step('\nUpdating cross dependencies...')
 updateVersions(targetVersion)
 ```
 
-### 3.5 打包编译所有包
+### 4.5 打包编译所有包
 
 ```js
 // build all packages with types
@@ -310,14 +352,14 @@ if (!skipBuild && !isDryRun) {
 }
 ```
 
-### 3.6 生成 changelog
+### 4.6 生成 changelog
 
 ```js
 // generate changelog
 await run(`yarn`, ['changelog'])
 ```
 
-### 3.7 提交代码
+### 4.7 提交代码
 
 ```js
 const { stdout } = await run('git', ['diff'], { stdio: 'pipe' })
@@ -330,7 +372,7 @@ if (stdout) {
 }
 ```
 
-### 3.8 更新
+### 4.8 更新
 
 ```js
 // publish packages
@@ -340,7 +382,7 @@ for (const pkg of packages) {
 }
 ```
 
-### 3.9 推送到 github
+### 4.9 推送到 github
 
 ```js
 // push to GitHub
@@ -367,4 +409,5 @@ if (skippedPackages.length) {
 console.log()
 ```
 
-## 总结
+## 5. 总结
+
