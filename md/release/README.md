@@ -2,7 +2,7 @@
 
 ## 1. 前言
 
-最近尤雨溪发布了3.2版本。小版本已经是`3.2.3`。本文来学习下尤大是怎么发布`vuejs`的。
+最近尤雨溪发布了3.2版本。小版本已经是`3.2.4`。本文来学习下尤大是怎么发布`vuejs`的。
 
 涉及到的 `vue-next/scripts/release.js`文件，整个文件代码行数虽然只有 `200` 余行，但非常值得我们学习。
 
@@ -52,12 +52,13 @@ yarn # install the dependencies of the project
 // vue-next/package.json
 {
     "private": true,
-    "version": "3.2.3",
+    "version": "3.2.4",
     "workspaces": [
         "packages/*"
     ],
     "scripts": {
-        // --dry 参数是我加的，不执行测试和编译 、不执行 推送git等操作
+        // --dry 参数是我加的，如果你是调试 代码也建议加
+        // 不执行测试和编译 、不执行 推送git等操作
         // 也就是说空跑，只是打印，后文再详细讲述
         "release": "node scripts/release.js --dry",
         "preinstall": "node ./scripts/checkYarn.js",
@@ -98,9 +99,9 @@ code -v
 
 学会调试后，先大致走一遍流程，在关键地方多打上几个断点多走几遍，就能猜测到源码意图了。
 
-## 3 前置声明等
+## 3 前置一些依赖引入和函数声明
 
-前置函数等分享
+前置一些依赖引入和函数声明
 
 ### 3.1 第一部分
 
@@ -153,6 +154,8 @@ $ node example/parse.js -x 3 -y 4 -n5 -abc --beep=boop foo bar baz
 
 #### 3.1.4 enquirer
 
+简单说就是交互式
+
 [enquirer](https://github.com/enquirer/enquirer)
 #### 3.1.5 execa
 
@@ -173,11 +176,20 @@ const execa = require('execa');
 
 ```js
 // vue-next/scripts/release.js
+
+// 对应 yarn run release --preid
+// true
 const preId =
   args.preid ||
   (semver.prerelease(currentVersion) && semver.prerelease(currentVersion)[0])
+// 对应 yarn run release --dry
+// true
 const isDryRun = args.dry
+// 对应 yarn run release --skipTests
+// true 跳过测试
 const skipTests = args.skipTests
+// 对应 yarn run release --skipBuild 
+// true
 const skipBuild = args.skipBuild
 
 // 读取 packages 文件夹，过滤掉 不是 .ts文件 结尾 并且不是 . 开头的文件夹
@@ -204,6 +216,8 @@ const versionIncrements = [
 
 const inc = i => semver.inc(currentVersion, i, preId)
 ```
+
+这一块可能不是很好理解。
 
 ### 3.4 第四部分
 
@@ -233,9 +247,37 @@ const step = msg => console.log(chalk.cyan(msg))
 bin('jest')
 ```
 
+相当于在命令终端，项目根目录 运行 `./node_modules/.bin/jest` 命令。
+
 #### 3.4.2 run、dryRun、runIfNotDry
 
+```js
+const run = (bin, args, opts = {}) =>
+  execa(bin, args, { stdio: 'inherit', ...opts })
+const dryRun = (bin, args, opts = {}) =>
+  console.log(chalk.blue(`[dryrun] ${bin} ${args.join(' ')}`), opts)
+const runIfNotDry = isDryRun ? dryRun : run
+```
+
+`run` 真实在终端跑命令，比如 `yarn build --release`
+
+`dryRun` 则是不跑，只是 `console.log();` 打印 'yarn build --release'
+
+`runIfNotDry` 如果不是空跑就执行命令。isDryRun 参数是通过控制台输入的。`yarn run release --dry`这样就是`true`。`runIfNotDry`就是只是打印，不执行命令。这样设计的好处在于，可以有时不想直接提交，要先看看执行命令的结果。不得不说，尤大就是会玩。
+
+在 `main` 函数末尾，也可以看到类似的提示。可以用`git diff`先看看文件修改。
+
+```js
+if (isDryRun) {
+  console.log(`\nDry run finished - run git diff to see package changes.`)
+}
+```
+
+看完了前置一些依赖引入和函数声明等，我们接着来看`main`主入口函数。
+
 ## 4 main 主流程
+
+第4节，主要都是`main` 函数梳理。
 
 ### 4.1 流程梳理 main 函数
 
@@ -268,12 +310,18 @@ main().catch(err => {
 })
 ```
 
+上面的`main`函数省略了很多具体函数实现。接下来我们拆解 `main` 函数。
+
 ### 4.2 确认要发布的版本
 
 第一段代码虽然比较长，但是还好理解。
 主要就是确认要发布的版本。
 
+调试时，我们看下这段的截图，就好理解啦。
+
 ```js
+// 根据上文 mini 这句代码意思是 yarn run release 3.2.4 
+// 取到参数 3.2.4
 let targetVersion = args._[0]
 
 if (!targetVersion) {
@@ -285,6 +333,7 @@ if (!targetVersion) {
     choices: versionIncrements.map(i => `${i} (${inc(i)})`).concat(['custom'])
   })
 
+// 选自定义
   if (release === 'custom') {
     targetVersion = (
       await prompt({
@@ -295,26 +344,28 @@ if (!targetVersion) {
       })
     ).version
   } else {
+    // 取到后面的版本
     targetVersion = release.match(/\((.*)\)/)[1]
   }
 }
 
+// 校验 版本是否符合 规范
 if (!semver.valid(targetVersion)) {
   throw new Error(`invalid target version: ${targetVersion}`)
 }
 
+// 确认要 release
 const { yes } = await prompt({
   type: 'confirm',
   name: 'yes',
   message: `Releasing v${targetVersion}. Confirm?`
 })
 
+// false 直接返回
 if (!yes) {
   return
 }
 ```
-
-args
 
 ### 4.3 执行测试用例
 
@@ -331,10 +382,54 @@ if (!skipTests && !isDryRun) {
 
 ### 4.4 更新依赖版本
 
+这一部分，就是更新根目录下`package.json` 的版本号和所有 `packages` 的版本号。
+
 ```js
 // update all package versions and inter-dependencies
 step('\nUpdating cross dependencies...')
 updateVersions(targetVersion)
+```
+
+```js
+function updateVersions(version) {
+  // 1. update root package.json
+  updatePackage(path.resolve(__dirname, '..'), version)
+  // 2. update all packages
+  packages.forEach(p => updatePackage(getPkgRoot(p), version))
+}
+```
+
+#### 4.4.1 updatePackage 更新包
+
+```js
+function updatePackage(pkgRoot, version) {
+  const pkgPath = path.resolve(pkgRoot, 'package.json')
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'))
+  pkg.version = version
+  updateDeps(pkg, 'dependencies', version)
+  updateDeps(pkg, 'peerDependencies', version)
+  fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
+}
+```
+
+#### 4.4.2 updateDeps 更新依赖版本号
+
+```js
+function updateDeps(pkg, depType, version) {
+  const deps = pkg[depType]
+  if (!deps) return
+  Object.keys(deps).forEach(dep => {
+    if (
+      dep === 'vue' ||
+      (dep.startsWith('@vue') && packages.includes(dep.replace(/^@vue\//, '')))
+    ) {
+      console.log(
+        chalk.yellow(`${pkg.name} -> ${depType} -> ${dep}@${version}`)
+      )
+      deps[dep] = version
+    }
+  })
+}
 ```
 
 ### 4.5 打包编译所有包
@@ -359,7 +454,15 @@ if (!skipBuild && !isDryRun) {
 await run(`yarn`, ['changelog'])
 ```
 
+`yarn changelog` 对应的脚本是`conventional-changelog -p angular -i CHANGELOG.md -s`。
+
 ### 4.7 提交代码
+
+经过更新版本号后，有文件改动，于是`git diff`。
+是否有文件改动，如果有提交。
+
+`git add -A`
+`git  commit -m 'release: v${targetVersion}'`
 
 ```js
 const { stdout } = await run('git', ['diff'], { stdio: 'pipe' })
@@ -372,7 +475,7 @@ if (stdout) {
 }
 ```
 
-### 4.8 更新
+### 4.8 发布包
 
 ```js
 // publish packages
@@ -382,21 +485,94 @@ for (const pkg of packages) {
 }
 ```
 
+这段函数比较长，简单说就是 `yarn publish` 发布包。
+
+```js
+async function publishPackage(pkgName, version, runIfNotDry) {
+  // 如果在 跳过包里 则跳过
+  if (skippedPackages.includes(pkgName)) {
+    return
+  }
+  const pkgRoot = getPkgRoot(pkgName)
+  const pkgPath = path.resolve(pkgRoot, 'package.json')
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'))
+  if (pkg.private) {
+    return
+  }
+
+  // For now, all 3.x packages except "vue" can be published as
+  // `latest`, whereas "vue" will be published under the "next" tag.
+  let releaseTag = null
+  if (args.tag) {
+    releaseTag = args.tag
+  } else if (version.includes('alpha')) {
+    releaseTag = 'alpha'
+  } else if (version.includes('beta')) {
+    releaseTag = 'beta'
+  } else if (version.includes('rc')) {
+    releaseTag = 'rc'
+  } else if (pkgName === 'vue') {
+    // TODO remove when 3.x becomes default
+    releaseTag = 'next'
+  }
+
+  // TODO use inferred release channel after official 3.0 release
+  // const releaseTag = semver.prerelease(version)[0] || null
+
+  step(`Publishing ${pkgName}...`)
+  try {
+    await runIfNotDry(
+      'yarn',
+      [
+        'publish',
+        '--new-version',
+        version,
+        ...(releaseTag ? ['--tag', releaseTag] : []),
+        '--access',
+        'public'
+      ],
+      {
+        cwd: pkgRoot,
+        stdio: 'pipe'
+      }
+    )
+    console.log(chalk.green(`Successfully published ${pkgName}@${version}`))
+  } catch (e) {
+    if (e.stderr.match(/previously published/)) {
+      console.log(chalk.red(`Skipping already published: ${pkgName}`))
+    } else {
+      throw e
+    }
+  }
+}
+```
+
 ### 4.9 推送到 github
 
 ```js
 // push to GitHub
 step('\nPushing to GitHub...')
+// 打 tag
 await runIfNotDry('git', ['tag', `v${targetVersion}`])
+// 推 tag
 await runIfNotDry('git', ['push', 'origin', `refs/tags/v${targetVersion}`])
+// git push 所有改动到 远程  - github
 await runIfNotDry('git', ['push'])
 ```
 
 ```js
+// yarn run release --dry
+
+// 如果传了这个参数则输出 可以用 git diff 看看更改
+
+// const isDryRun = args.dry
 if (isDryRun) {
   console.log(`\nDry run finished - run git diff to see package changes.`)
 }
 
+// 如果 跳过的包，则输出以下这些包没有发布。不过代码 `skippedPackages` 里是没有包。
+// 所以这段代码也不会执行。
+// 我们习惯写 arr.length !== 0 其实 0 就是 false 。可以不写。
 if (skippedPackages.length) {
   console.log(
     chalk.yellow(
@@ -408,6 +584,10 @@ if (skippedPackages.length) {
 }
 console.log()
 ```
+
+到这里我们就拆解分析完 `main` 函数了。
+
+整个流程很清晰。很多代码我们可以直接复制粘贴修改，优化我们自己发布的流程。比如写小程序，相对可能发布频繁，可以使用这套代码，加上一些自定义。当然也可以用开源的[`release-it`](https://github.com/release-it/release-it)。
 
 ## 5. 总结
 
