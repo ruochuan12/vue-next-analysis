@@ -201,14 +201,12 @@ export function compileScript(
       let content = script.content
       if (cssVars.length) {
         content = rewriteDefault(content, `__default__`, plugins)
-        if (cssVars.length) {
-          content += genNormalScriptCssVarsCode(
-            cssVars,
-            bindings,
-            scopeId,
-            !!options.isProd
-          )
-        }
+        content += genNormalScriptCssVarsCode(
+          cssVars,
+          bindings,
+          scopeId,
+          !!options.isProd
+        )
         content += `\nexport default __default__`
       }
       return {
@@ -829,6 +827,13 @@ export function compileScript(
             )
           }
         }
+      } else if (
+        (node.type === 'VariableDeclaration' ||
+          node.type === 'FunctionDeclaration' ||
+          node.type === 'ClassDeclaration') &&
+        !node.declare
+      ) {
+        walkDeclaration(node, setupBindings, userImportAlias)
       }
     }
   }
@@ -2212,7 +2217,7 @@ function resolveTemplateUsageCheckString(sfc: SFCDescriptor) {
             !parserOptions.isNativeTag!(node.tag) &&
             !parserOptions.isBuiltInComponent!(node.tag)
           ) {
-            code += `,${capitalize(camelize(node.tag))}`
+            code += `,${camelize(node.tag)},${capitalize(camelize(node.tag))}`
           }
           for (let i = 0; i < node.props.length; i++) {
             const prop = node.props[i]
