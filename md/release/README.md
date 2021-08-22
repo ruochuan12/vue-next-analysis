@@ -2,7 +2,7 @@
 highlight: darcula
 theme: smartblue
 ---
-# 尤雨溪是怎么发布 vuejs 的
+# Vue 3.2 发布了，那尤雨溪是怎么发布 Vue.js 的？
 
 ## 1. 前言
 
@@ -120,7 +120,7 @@ code -v
 
 ![terminal](./images/debugger-terminal.png)
 
-[ 更多 nodejs 调试相关  可以查看官方文档](https://code.visualstudio.com/docs/nodejs/nodejs-debugging)
+[更多 nodejs 调试相关  可以查看官方文档](https://code.visualstudio.com/docs/nodejs/nodejs-debugging)
 
 学会调试后，先大致走一遍流程，在关键地方多打上几个断点多走几遍，就能猜测到源码意图了。
 
@@ -211,9 +211,9 @@ const args = require('minimist')(process.argv.slice(2))
 const execa = require('execa');
 
 (async () => {
-	const {stdout} = await execa('echo', ['unicorns']);
-	console.log(stdout);
-	//=> 'unicorns'
+  const {stdout} = await execa('echo', ['unicorns']);
+  console.log(stdout);
+  //=> 'unicorns'
 })();
 ```
 
@@ -440,7 +440,7 @@ if (!skipTests && !isDryRun) {
 }
 ```
 
-### 4.4 更新依赖版本
+### 4.4 更新所有包的版本号和内部 vue 相关依赖版本号
 
 这一部分，就是更新根目录下`package.json` 的版本号和所有 `packages` 的版本号。
 
@@ -459,7 +459,7 @@ function updateVersions(version) {
 }
 ```
 
-#### 4.4.1 updatePackage 更新包
+#### 4.4.1 updatePackage 更新包的版本号
 
 ```js
 function updatePackage(pkgRoot, version) {
@@ -472,7 +472,19 @@ function updatePackage(pkgRoot, version) {
 }
 ```
 
-#### 4.4.2 updateDeps 更新依赖版本号
+主要就是三种修改。
+
+```bash
+1. 自己本身 package.json 的版本号
+2. packages.json 中 dependencies 中 vue 相关的依赖修改
+3. packages.json 中 peerDependencies 中 vue 相关的依赖修改
+```
+
+一图胜千言。我们执行`yarn release --dry` 后 `git diff` 查看的 `git` 修改，部分截图如下。
+
+![更新的版本号举例](./images/vue-dep.png)
+
+#### 4.4.2 updateDeps 更新内部 vue 相关依赖的版本号
 
 ```js
 function updateDeps(pkg, depType, version) {
@@ -490,6 +502,18 @@ function updateDeps(pkg, depType, version) {
     }
   })
 }
+```
+
+一图胜千言。我们在终端执行`yarn release --dry`。会看到这样是输出。
+
+![更新 Vue 相关依赖的终端输出](./images/release-terminal.png)
+
+也就是这句代码输出的。
+
+```js
+console.log(
+  chalk.yellow(`${pkg.name} -> ${depType} -> ${dep}@${version}`)
+)
 ```
 
 ### 4.5 打包编译所有包
@@ -546,6 +570,20 @@ for (const pkg of packages) {
 ```
 
 这段函数比较长，可以不用细看，简单说就是 `yarn publish` 发布包。
+我们 `yarn release --dry`后，这块函数在终端输出的如下：
+
+![发布终端输出命令](./images/publish.png)
+
+值得一提的是，如果是 `vue` 默认有个 `tag` 为 `next`。当 `Vue 3.x` 是默认时删除。
+
+```js
+} else if (pkgName === 'vue') {
+  // TODO remove when 3.x becomes default
+  releaseTag = 'next'
+}
+```
+
+也就是为什么我们现在安装 `vue3` 还是 `npm i vue@next`命令。
 
 ```js
 async function publishPackage(pkgName, version, runIfNotDry) {
@@ -645,6 +683,10 @@ if (skippedPackages.length) {
 console.log()
 ```
 
+我们 `yarn release --dry`后，这块函数在终端输出的如下：
+
+![发布到github](./images/pushing-to-github.png)
+
 到这里我们就拆解分析完 `main` 函数了。
 
 整个流程很清晰。
@@ -652,9 +694,9 @@ console.log()
 ```bash
 1. 确认要发布的版本
 2. 执行测试用例
-3. 更新依赖版本
-    3.1 updatePackage 更新包
-    3.2 updateDeps 更新依赖版本号
+3. 更新所有包的版本号和内部 vue 相关依赖版本号
+    3.1 updatePackage 更新包的版本号
+    3.2 updateDeps 更新内部 vue 相关依赖的版本号
 4. 打包编译所有包
 5. 生成 changelog
 6. 提交代码
@@ -670,15 +712,25 @@ console.log()
 
 ## 5. 总结
 
+通过本文学习，我们学会了这些。
+
+```bash
+1. 熟悉 vuejs 发布流程
+2. 学会调试 nodejs 代码
+3. 动手优化公司项目发布流程
+```
+
+同时建议自己动手用 `VSCode` 多调试，在终端多执行几次，多理解消化。
+
 `vuejs`发布的文件很多代码我们可以直接复制粘贴修改，优化我们自己发布的流程。比如写小程序，相对可能发布频繁，完全可以使用这套代码，配合[miniprogram-ci](https://developers.weixin.qq.com/miniprogram/dev/devtools/ci.html)，再加上一些自定义，加以优化。
 
 当然也可以用开源的[release-it](https://github.com/release-it/release-it)。
 
 同时，我们可以：
 
-引入[git flow](https://www.atlassian.com/git/tutorials/comparing-workflows/gitflow-workflow)，管理`git`分支。估计很多人不知道`windows` `git bash`已经默认支持 `git flow `命令。
+引入 [git flow](https://www.atlassian.com/git/tutorials/comparing-workflows/gitflow-workflow)，管理`git`分支。估计很多人不知道`windows` `git bash`已经默认支持 `git flow`命令。
 
-引入[husky](https://github.com/typicode/husky)和[lint-staged](https://github.com/okonet/lint-staged) 提交`commit`时用`ESLint`等校验代码提交是否能够通过检测。
+引入 [husky](https://github.com/typicode/husky) 和 [lint-staged](https://github.com/okonet/lint-staged) 提交`commit`时用`ESLint`等校验代码提交是否能够通过检测。
 
 引入 单元测试 [jest](https://github.com/facebook/jest)，测试关键的工具函数等。
 
