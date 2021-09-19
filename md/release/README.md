@@ -47,13 +47,14 @@ theme: smartblue
 node -v
 # v14.16.0
 # 全局安装 yarn
-# 克隆项目
-git clone https://github.com/vuejs/vue-next.git
-cd vue-next
 
-# 或者克隆我的项目
+# 建议克隆我的项目
 git clone https://github.com/lxchuan12/vue-next-analysis.git
 cd vue-next-analysis/vue-next
+
+# 或者克隆官方项目
+git clone https://github.com/vuejs/vue-next.git
+cd vue-next
 
 # 安装 yarn
 npm install --global yarn
@@ -723,6 +724,12 @@ console.log()
 同时建议自己动手用 `VSCode` 多调试，在终端多执行几次，多理解消化。
 
 `vuejs`发布的文件很多代码我们可以直接复制粘贴修改，优化我们自己发布的流程。比如写小程序，相对可能发布频繁，完全可以使用这套代码，配合[miniprogram-ci](https://developers.weixin.qq.com/miniprogram/dev/devtools/ci.html)，再加上一些自定义，加以优化。
+
+关于小程序 ci 上传，再分享两篇文章。
+
+[基于 CI 实现微信小程序的持续构建](https://help.coding.net/docs/best-practices/ci/1minute/wechat-mini-program.html)
+
+[小打卡小程序自动化构建及发布的工程化实践](https://www.yuque.com/jinxuanzheng/gvhmm5/uy4qu9#8yQ8M) 虽然文章里不是最新的 miniprogram-ci，但这篇场景写得比较全面。
 
 当然也可以用开源的 [release-it](https://github.com/release-it/release-it)。
 
