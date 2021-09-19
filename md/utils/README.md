@@ -58,13 +58,14 @@ highlight: dracula
 node -v
 # v14.16.0
 # 全局安装 yarn
-# 克隆项目
-git clone https://github.com/vuejs/vue-next.git
-cd vue-next
 
-# 或者克隆我的项目
+# 推荐克隆我的项目
 git clone https://github.com/lxchuan12/vue-next-analysis.git
 cd vue-next-analysis
+
+# 或者克隆官方项目
+git clone https://github.com/vuejs/vue-next.git
+cd vue-next
 
 npm install --global yarn
 yarn # install the dependencies of the project
