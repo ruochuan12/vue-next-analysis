@@ -61,7 +61,7 @@ node -v
 
 # 推荐克隆我的项目
 git clone https://github.com/lxchuan12/vue-next-analysis.git
-cd vue-next-analysis
+cd vue-next-analysis/vue-next
 
 # 或者克隆官方项目
 git clone https://github.com/vuejs/vue-next.git
