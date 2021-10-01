@@ -731,7 +731,7 @@ console.log()
 
 [小打卡小程序自动化构建及发布的工程化实践](https://www.yuque.com/jinxuanzheng/gvhmm5/uy4qu9#8yQ8M) 虽然文章里不是最新的 miniprogram-ci，但这篇场景写得比较全面。
 
-当然也可以用开源的 [release-it](https://github.com/release-it/release-it)。
+当然版本发布也可以用开源的 [release-it](https://github.com/release-it/release-it)。
 
 同时，我们可以：
 
@@ -748,3 +748,5 @@ console.log()
 等等规范自己项目的流程。如果一个候选人，通过看`vuejs`发布的源码，积极主动优化自己项目。我觉得面试官会认为这个候选人比较加分。
 
 看开源项目源码的好处在于：一方面可以拓展视野，另外一方面可以为自己所用，收益相对较高。
+
+最后欢迎加我微信 [ruochuan12](https://mp.weixin.qq.com/s?__biz=MzA5MjQwMzQyNw==&mid=2650756550&idx=1&sn=9acc5e30325963e455f53ec2f64c1fdd&chksm=8866564abf11df5c41307dba3eb84e8e14de900e1b3500aaebe802aff05b0ba2c24e4690516b&token=917686367&lang=zh_CN#rd) 交流，参与 [源码共读](https://mp.weixin.qq.com/s?__biz=MzA5MjQwMzQyNw==&mid=2650756550&idx=1&sn=9acc5e30325963e455f53ec2f64c1fdd&chksm=8866564abf11df5c41307dba3eb84e8e14de900e1b3500aaebe802aff05b0ba2c24e4690516b&token=917686367&lang=zh_CN#rd) 活动，大家一起学习源码，共同进步。

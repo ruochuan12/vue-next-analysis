@@ -946,3 +946,5 @@ const getGlobalThis = () => {
 同时还分享了`vue`源码的调试技巧，推荐了一些书籍和看书籍的方法。
 
 源码也不是那么可怕。平常我们工作中也是经常能使用到这些工具函数。通过学习一些简单源码，拓展视野的同时，还能落实到自己工作开发中，收益相对比较高。
+
+最后欢迎加我微信 [ruochuan12](https://mp.weixin.qq.com/s?__biz=MzA5MjQwMzQyNw==&mid=2650756550&idx=1&sn=9acc5e30325963e455f53ec2f64c1fdd&chksm=8866564abf11df5c41307dba3eb84e8e14de900e1b3500aaebe802aff05b0ba2c24e4690516b&token=917686367&lang=zh_CN#rd) 交流，参与 [源码共读](https://mp.weixin.qq.com/s?__biz=MzA5MjQwMzQyNw==&mid=2650756550&idx=1&sn=9acc5e30325963e455f53ec2f64c1fdd&chksm=8866564abf11df5c41307dba3eb84e8e14de900e1b3500aaebe802aff05b0ba2c24e4690516b&token=917686367&lang=zh_CN#rd) 活动，大家一起学习源码，共同进步。

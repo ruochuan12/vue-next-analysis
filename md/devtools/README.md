@@ -78,3 +78,5 @@ yarn build
 启发：我们要养成多查阅官方文档或者`github README`的习惯。好的开源项目，`README`一般都写得非常好。另外除了什么新功能，一般在官方文档或者 `README` 会有体现。虽然一般 `README` 是英文的会阻拦一部分人，但如果真的看不懂还可以通过谷歌翻译等翻译工具。
 
 >再次友情提醒：插件我已经打包好，放到百度网盘中，在我的公众号：若川视野，回复关键词【插件】即可获取到两个版本的 `devtools` 进行安装，两个版本可以共存。
+
+最后欢迎加我微信 [ruochuan12](https://mp.weixin.qq.com/s?__biz=MzA5MjQwMzQyNw==&mid=2650756550&idx=1&sn=9acc5e30325963e455f53ec2f64c1fdd&chksm=8866564abf11df5c41307dba3eb84e8e14de900e1b3500aaebe802aff05b0ba2c24e4690516b&token=917686367&lang=zh_CN#rd) 交流，参与 [源码共读](https://mp.weixin.qq.com/s?__biz=MzA5MjQwMzQyNw==&mid=2650756550&idx=1&sn=9acc5e30325963e455f53ec2f64c1fdd&chksm=8866564abf11df5c41307dba3eb84e8e14de900e1b3500aaebe802aff05b0ba2c24e4690516b&token=917686367&lang=zh_CN#rd) 活动，大家一起学习源码，共同进步。
