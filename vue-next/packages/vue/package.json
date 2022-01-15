@@ -43,7 +43,7 @@
   },
   "devDependencies": {
     "lodash": "^4.17.15",
-    "marked": "^0.7.0",
+    "marked": "^4.0.10",
     "todomvc-app-css": "^2.3.0"
   }
 }
